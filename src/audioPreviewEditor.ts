@@ -9,6 +9,8 @@ import {
   WebviewMessageType,
 } from "./message";
 
+const ANALYZE_UI_CACHE_KEY = "wavPreview.analyzeUiCache.v1";
+
 class AudioPreviewDocument extends Disposable implements vscode.CustomDocument {
   static async create(
     uri: vscode.Uri,
@@ -96,6 +98,38 @@ export class AudioPreviewEditorProvider
 
   constructor(private readonly _context: vscode.ExtensionContext) {}
 
+  private buildWebviewConfig(document: AudioPreviewDocument): {
+    autoAnalyze: boolean;
+    playerDefault: PlayerDefault;
+    analyzeDefault: AnalyzeDefault;
+    fileExt: string;
+  } {
+    const config = vscode.workspace.getConfiguration("WavPreview");
+    const fileExt =
+      document.uri.fsPath.split(".").pop()?.toLowerCase() ?? "";
+    const workspaceAnalyze =
+      (config.get("analyzeDefault") as AnalyzeDefault) ?? ({} as AnalyzeDefault);
+    let analyzeDefault = { ...workspaceAnalyze } as AnalyzeDefault;
+    if (config.get("cacheAnalyzeUi") !== false) {
+      const cached = this._context.globalState.get<Record<string, unknown>>(
+        ANALYZE_UI_CACHE_KEY,
+      );
+      if (cached && typeof cached === "object") {
+        analyzeDefault = { ...analyzeDefault, ...cached } as AnalyzeDefault;
+      }
+    }
+    if (analyzeDefault.highResolutionSpectrogram === undefined) {
+      analyzeDefault.highResolutionSpectrogram =
+        config.get<boolean>("highResolutionSpectrogram") === true;
+    }
+    return {
+      autoAnalyze: !!config.get("autoAnalyze"),
+      playerDefault: (config.get("playerDefault") ?? {}) as PlayerDefault,
+      analyzeDefault,
+      fileExt,
+    };
+  }
+
   async openCustomDocument(
     uri: vscode.Uri,
     openContext: { backupId?: string },
@@ -157,18 +191,25 @@ export class AudioPreviewEditorProvider
   ) {
     switch (msg.type) {
       case WebviewMessageType.CONFIG: {
-        // read config
-        const config = vscode.workspace.getConfiguration("WavPreview");
+        const data = this.buildWebviewConfig(document);
         this.postMessage(webviewPanel.webview, {
           type: ExtMessageType.CONFIG,
-          data: {
-            autoAnalyze: config.get("autoAnalyze"),
-            playerDefault: config.get("playerDefault") as PlayerDefault,
-            analyzeDefault: config.get("analyzeDefault") as AnalyzeDefault,
-          },
+          data,
         });
         break;
       }
+
+      case WebviewMessageType.SAVE_ANALYZE_UI:
+        if (WebviewMessageType.isSaveAnalyzeUi(msg)) {
+          const cfg = vscode.workspace.getConfiguration("WavPreview");
+          if (cfg.get("cacheAnalyzeUi") !== false) {
+            await this._context.globalState.update(
+              ANALYZE_UI_CACHE_KEY,
+              msg.data,
+            );
+          }
+        }
+        break;
 
       case WebviewMessageType.DATA:
         if (WebviewMessageType.isDATA(msg)) {
@@ -244,7 +285,7 @@ export class AudioPreviewEditorProvider
             <head>
                 <meta charset="UTF-8">
                 
-                <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} blob:; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'wasm-unsafe-eval' 'nonce-${nonce}'; connect-src data:;">
+                <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} blob:; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'wasm-unsafe-eval' 'nonce-${nonce}'; worker-src ${webview.cspSource} blob:; connect-src data: ${webview.cspSource} https://*.vscode-cdn.net;">
                 
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 

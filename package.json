@@ -84,6 +84,16 @@
           "type": "object",
           "default": {},
           "description": "default values of analyze settings"
+        },
+        "WavPreview.highResolutionSpectrogram": {
+          "type": "boolean",
+          "default": false,
+          "description": "Use a larger spectrogram canvas for sharper STFT rendering (more frequency columns per width)."
+        },
+        "WavPreview.cacheAnalyzeUi": {
+          "type": "boolean",
+          "default": true,
+          "description": "Remember analyze panel settings between audio files (stored by the extension, not cookies)."
         }
       }
     }
@@ -126,9 +136,15 @@
     "webpack-cli": "^4.9.1"
   },
   "dependencies": {
+    "@wasm-audio-decoders/flac": "^0.2.10",
+    "@wasm-audio-decoders/ogg-vorbis": "^0.1.20",
     "assert": "^2.0.0",
+    "essentia.js": "^0.1.3",
+    "mpg123-decoder": "^1.0.3",
+    "ogg-opus-decoder": "^1.7.3",
     "ooura": "^2.1.6",
     "path-browserify": "^1.0.1",
-    "process": "^0.11.10"
+    "process": "^0.11.10",
+    "twgl.js": "^7.0.0"
   }
 }

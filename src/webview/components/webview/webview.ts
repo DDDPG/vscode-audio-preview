@@ -8,7 +8,7 @@ import {
 } from "../../../message";
 import Component from "../../component";
 import { Config } from "../../../config";
-import Decoder from "../../decoder";
+import { IAudioDecoder } from "../../decoders/audioDecoderInterface";
 import PlayerService from "../../services/playerService";
 import PlayerSettingsService from "../../services/playerSettingsService";
 import AnalyzeService from "../../services/analyzeService";
@@ -19,7 +19,7 @@ import SettingTab from "../settingTab/settingTabComponent";
 import AnalyzerComponent from "../analyzer/analyzerComponent";
 
 type CreateAudioContext = (sampleRate: number) => AudioContext;
-type CreateDecoder = (fileData: Uint8Array) => Promise<Decoder>;
+type CreateDecoder = (fileData: Uint8Array, ext: string) => Promise<IAudioDecoder>;
 
 export default class WebView extends Component {
   private _fileData: Uint8Array;
@@ -27,6 +27,7 @@ export default class WebView extends Component {
   private _postMessage: PostMessage;
   private _createAudioContext: CreateAudioContext;
   private _createDecoder: CreateDecoder;
+  private _fileExt: string = "";
 
   private _config: Config;
 
@@ -68,6 +69,7 @@ export default class WebView extends Component {
       case ExtMessageType.CONFIG:
         if (ExtMessageType.isCONFIG(msg)) {
           this._config = msg.data;
+          this._fileExt = msg.data.fileExt ?? "";
           console.log(msg.data);
           this._postMessage({
             type: WebviewMessageType.DATA,
@@ -121,9 +123,9 @@ export default class WebView extends Component {
   }
 
   private async activateUI() {
-    const decoder = await this._createDecoder(this._fileData);
+    const decoder = await this._createDecoder(this._fileData, this._fileExt);
 
-    // show header info
+    // Phase 1: show header info immediately (fast path)
     console.log("read header info");
     decoder.readAudioInfo();
     const infoTableComponent = new InfoTableComponent("#infoTable");
@@ -135,14 +137,15 @@ export default class WebView extends Component {
       decoder.encoding,
     );
 
-    // decode
+    // decode audio data
     console.log("decode");
     decoder.decode();
 
     console.log("show other ui");
-    // show additional info
     infoTableComponent.showAdditionalInfo(decoder.duration);
-    // init audio context and buffer
+    infoTableComponent.appendCursorProbeRows();
+    this._disposables.push(infoTableComponent);
+
     const audioContext = this._createAudioContext(decoder.sampleRate);
     const audioBuffer = audioContext.createBuffer(
       decoder.numChannels,
@@ -153,7 +156,7 @@ export default class WebView extends Component {
       const d = Float32Array.from(decoder.samples[ch]);
       audioBuffer.copyToChannel(d, ch);
     }
-    // init player
+
     const playerSettingsService = PlayerSettingsService.fromDefaultSetting(
       this._config.playerDefault,
       audioBuffer,
@@ -170,12 +173,30 @@ export default class WebView extends Component {
     );
     this._disposables.push(playerService, playerComponent);
 
-    // init setting tab
     const analyzeService = new AnalyzeService(audioBuffer);
     const analyzeSettingsService = AnalyzeSettingsService.fromDefaultSetting(
       this._config.analyzeDefault,
       audioBuffer,
     );
+
+    let persistTimer: ReturnType<typeof setTimeout> | undefined;
+    const debouncedPersist = () => {
+      clearTimeout(persistTimer);
+      persistTimer = setTimeout(() => {
+        this._postMessage({
+          type: WebviewMessageType.SAVE_ANALYZE_UI,
+          data: analyzeSettingsService.toCachedDefaults(),
+        });
+      }, 500);
+    };
+    analyzeSettingsService.setPersistHook(debouncedPersist);
+    this._register({
+      dispose: () => {
+        analyzeSettingsService.setPersistHook(undefined);
+        clearTimeout(persistTimer);
+      },
+    });
+
     const settingTabComponent = new SettingTab(
       "#settingTab",
       playerSettingsService,
@@ -190,18 +211,28 @@ export default class WebView extends Component {
       settingTabComponent,
     );
 
-    // init analyzer
-    const analyzerComponent = new AnalyzerComponent(
-      "#analyzer",
-      audioBuffer,
-      analyzeService,
-      analyzeSettingsService,
-      playerService,
-      this._config.autoAnalyze,
-    );
-    this._disposables.push(analyzerComponent);
-
-    // dispose decoder
     decoder.dispose();
+
+    // Phase 2: defer spectrogram/analyzer init so the player and info table
+    // are visible before the potentially-long analysis begins.
+    const scheduleIdle: (cb: () => void) => void =
+      typeof requestIdleCallback !== "undefined"
+        ? (cb) => requestIdleCallback(cb)
+        : (cb) => setTimeout(cb, 0);
+
+    scheduleIdle(async () => {
+      // Try to initialize essentia.js WASM for higher-quality STFT
+      await analyzeService.initEssentia();
+
+      const analyzerComponent = new AnalyzerComponent(
+        "#analyzer",
+        audioBuffer,
+        analyzeService,
+        analyzeSettingsService,
+        playerService,
+        this._config.autoAnalyze,
+      );
+      this._disposables.push(analyzerComponent);
+    });
   }
 }

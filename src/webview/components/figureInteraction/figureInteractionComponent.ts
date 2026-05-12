@@ -1,11 +1,16 @@
 import "./figureInteractionComponent.css";
-import { EventType } from "../../events";
+import { CursorReadoutPayload, EventType } from "../../events";
 import PlayerService from "../../services/playerService";
 import AnalyzeService from "../../services/analyzeService";
 import AnalyzeSettingsService, {
   AnalyzeSettingsProps,
   FrequencyScale,
 } from "../../services/analyzeSettingsService";
+import {
+  canvasYTopToLogPiecewiseYNorm,
+  piecewiseLogAxisBoundaries,
+  piecewiseYNormToHz,
+} from "../../spectrogramFrequencyLayout";
 import Component from "../../component";
 
 export default class FigureInteractionComponent extends Component {
@@ -26,11 +31,12 @@ export default class FigureInteractionComponent extends Component {
     analyseSettingsService: AnalyzeSettingsService,
     audioBuffer: AudioBuffer,
     settings: AnalyzeSettingsProps,
+    channelIndex: number,
   ) {
     super();
     const componentRoot = document.querySelector(componentRootSelector);
 
-    // register seekbar on figures
+    // register seekbar (playback progress) on figures
     const visibleBar = document.createElement("div");
     visibleBar.className = "visibleBar";
     componentRoot.appendChild(visibleBar);
@@ -56,9 +62,130 @@ export default class FigureInteractionComponent extends Component {
       },
     );
 
+    // register playback position marker (static white line)
+    const positionBar = document.createElement("div");
+    positionBar.className = "positionBar";
+    positionBar.style.position = "absolute";
+    positionBar.style.top = "0";
+    positionBar.style.width = "2px";
+    positionBar.style.height = "100%";
+    positionBar.style.backgroundColor = "white";
+    positionBar.style.pointerEvents = "none";
+    positionBar.style.zIndex = "10";
+    positionBar.style.display = "none";
+    componentRoot.appendChild(positionBar);
+
+    this._addEventlistener(
+      playerService,
+      EventType.UPDATE_PLAYBACK_POSITION,
+      (e: CustomEventInit) => {
+        const sec = e.detail.sec;
+        const percentInFigureRange =
+          ((sec - settings.minTime) / (settings.maxTime - settings.minTime)) *
+          100;
+        if (percentInFigureRange < 0 || 100 < percentInFigureRange) {
+          positionBar.style.display = "none";
+          return;
+        }
+        positionBar.style.display = "block";
+        positionBar.style.left = `${percentInFigureRange}%`;
+      },
+    );
+
     const userInputDiv = document.createElement("div");
     userInputDiv.className = "userInputDiv";
     componentRoot.appendChild(userInputDiv);
+
+    let cursorReadoutRaf = 0;
+    let lastClientX = 0;
+    let lastClientY = 0;
+    const publishCursorReadout = () => {
+      const props = analyseSettingsService.toProps();
+      const rect = userInputDiv.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) {
+        return;
+      }
+      const xn = Math.min(
+        Math.max(0, lastClientX - rect.left),
+        rect.width,
+      );
+      const yn = Math.min(
+        Math.max(0, lastClientY - rect.top),
+        rect.height,
+      );
+      const trng = props.maxTime - props.minTime;
+      if (trng <= 0) {
+        return;
+      }
+      const t = props.minTime + (xn / rect.width) * trng;
+      const sr = audioBuffer.sampleRate;
+      const center = Math.min(
+        Math.max(0, Math.floor(t * sr)),
+        Math.max(0, audioBuffer.length - 1),
+      );
+      const win = Math.min(16384, Math.max(256, props.windowSize));
+      const chData = audioBuffer.getChannelData(channelIndex);
+      const { rms, peak } = AnalyzeService.windowRmsPeak(chData, center, win);
+      const rmsWindowDurationSec = win / sr;
+      if (onWaveformCanvas) {
+        window.dispatchEvent(
+          new CustomEvent<CursorReadoutPayload>(EventType.CURSOR_READOUT, {
+            detail: {
+              kind: "waveform",
+              channelIndex,
+              rms,
+              peak,
+              rmsWindowDurationSec,
+            },
+          }),
+        );
+      } else {
+        const hz = AnalyzeService.spectrogramCursorYToHz(
+          yn,
+          rect.height,
+          props.frequencyScale,
+          props.minFrequency,
+          props.maxFrequency,
+        );
+        window.dispatchEvent(
+          new CustomEvent<CursorReadoutPayload>(EventType.CURSOR_READOUT, {
+            detail: {
+              kind: "spectrogram",
+              channelIndex,
+              rms,
+              peak,
+              frequencyHz: hz,
+              rmsWindowDurationSec,
+            },
+          }),
+        );
+      }
+    };
+    const scheduleCursorReadout = (clientX: number, clientY: number) => {
+      lastClientX = clientX;
+      lastClientY = clientY;
+      if (cursorReadoutRaf) {
+        return;
+      }
+      cursorReadoutRaf = requestAnimationFrame(() => {
+        cursorReadoutRaf = 0;
+        publishCursorReadout();
+      });
+    };
+    this._addEventlistener(userInputDiv, EventType.MOUSE_MOVE, (event: MouseEvent) => {
+      scheduleCursorReadout(event.clientX, event.clientY);
+    });
+    this._addEventlistener(userInputDiv, "mouseleave", () => {
+      if (cursorReadoutRaf) {
+        cancelAnimationFrame(cursorReadoutRaf);
+        cursorReadoutRaf = 0;
+      }
+      window.dispatchEvent(
+        new CustomEvent<CursorReadoutPayload>(EventType.CURSOR_READOUT, {
+          detail: { kind: "clear" },
+        }),
+      );
+    });
 
     this._addEventlistener(
       userInputDiv,
@@ -173,15 +300,14 @@ export default class FigureInteractionComponent extends Component {
           Math.abs(this.mouseDownX - mouseUpX) < 3 &&
           Math.abs(this.mouseDownY - mouseUpY) < 3
         ) {
-          // start playing from the clicked position
+          // set playback position marker (does not start playing)
           const xPercentInFigureRange =
             ((mouseUpX - rect.left) / rect.width) * 100;
           const sec =
             (xPercentInFigureRange / 100) *
               (settings.maxTime - settings.minTime) +
             settings.minTime;
-          const percentInFullRange = (sec / audioBuffer.duration) * 100;
-          playerService.onSeekbarInput(percentInFullRange);
+          playerService.setPlaybackPosition(sec);
           return;
         }
 
@@ -320,30 +446,31 @@ export default class FigureInteractionComponent extends Component {
             maxFrequency =
               (1 - minY / rect.height) * frequencyRange + settings.minFrequency;
             break;
-          case FrequencyScale.Log:
-            frequencyRange =
-              Math.log10(settings.maxFrequency) -
-              Math.log10(settings.minFrequency);
-            minFrequency =
-              Math.pow(10, (1 - maxY / rect.height) * frequencyRange) +
-              settings.minFrequency;
-            maxFrequency =
-              Math.pow(10, (1 - minY / rect.height) * frequencyRange) +
-              settings.minFrequency;
+          case FrequencyScale.Log: {
+            const bounds = piecewiseLogAxisBoundaries(
+              settings.minFrequency,
+              settings.maxFrequency,
+            );
+            const yNormLo = canvasYTopToLogPiecewiseYNorm(maxY, rect.height);
+            const yNormHi = canvasYTopToLogPiecewiseYNorm(minY, rect.height);
+            const hzA = piecewiseYNormToHz(yNormLo, bounds);
+            const hzB = piecewiseYNormToHz(yNormHi, bounds);
+            minFrequency = Math.min(hzA, hzB);
+            maxFrequency = Math.max(hzA, hzB);
             break;
-          case FrequencyScale.Mel:
-            frequencyRange =
-              AnalyzeService.hzToMel(settings.maxFrequency) -
-              AnalyzeService.hzToMel(settings.minFrequency);
-            minFrequency =
-              AnalyzeService.melToHz(
-                (1 - maxY / rect.height) * frequencyRange,
-              ) + settings.minFrequency;
-            maxFrequency =
-              AnalyzeService.melToHz(
-                (1 - minY / rect.height) * frequencyRange,
-              ) + settings.minFrequency;
+          }
+          case FrequencyScale.Mel: {
+            const melMin = AnalyzeService.hzToMel(settings.minFrequency);
+            const melMax = AnalyzeService.hzToMel(settings.maxFrequency);
+            const melSpan = melMax - melMin;
+            minFrequency = AnalyzeService.melToHz(
+              melMin + (1 - maxY / rect.height) * melSpan,
+            );
+            maxFrequency = AnalyzeService.melToHz(
+              melMin + (1 - minY / rect.height) * melSpan,
+            );
             break;
+          }
         }
         analyseSettingsService.minFrequency = minFrequency;
         analyseSettingsService.maxFrequency = maxFrequency;

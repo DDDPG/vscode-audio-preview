@@ -42,4 +42,12 @@ describe("analyzeService", () => {
     spy.mockReset();
     spy.mockRestore();
   });
+
+  test("windowRmsPeak", () => {
+    const data = new Float32Array([0.6, -0.8, 0, 0.6]);
+    const { rms, peak } = AnalyzeService.windowRmsPeak(data, 1, 4);
+    expect(peak).toBeCloseTo(0.8, 5);
+    const meanSq = (0.36 + 0.64 + 0 + 0.36) / 4;
+    expect(rms).toBeCloseTo(Math.sqrt(meanSq), 5);
+  });
 });

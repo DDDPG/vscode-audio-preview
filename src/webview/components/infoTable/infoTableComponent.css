@@ -1,4 +1,5 @@
 .infoTable {
+  table-layout: fixed;
   width: 100%;
   padding: 0.5em;
   border-collapse: collapse;
@@ -7,4 +8,23 @@
 .infoTableData {
   border: solid 1px var(--vscode-foreground);
   padding: 0.5em;
+  box-sizing: border-box;
+  vertical-align: middle;
+}
+
+/* Stable column widths: long labels / values clip instead of widening the table. */
+.infoTable tr > td:first-child {
+  width: 44%;
+  max-width: 44%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.infoTable tr > td:last-child {
+  width: 56%;
+  max-width: 56%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }

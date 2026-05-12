@@ -4,6 +4,8 @@ import { EventType } from "../../events";
 import AnalyzeService from "../../services/analyzeService";
 import AnalyzeSettingsService, {
   AnalyzeSettingsProps,
+  FftBackend,
+  WindowType,
 } from "../../services/analyzeSettingsService";
 
 export default class AnalyzeSettingsComponent extends Component {
@@ -45,8 +47,12 @@ export default class AnalyzeSettingsComponent extends Component {
           <input class="js-analyzeSetting-spectrogramVisible" type="checkbox">visible
       </div>
       <div>
+          <input class="js-analyzeSetting-highResolutionSpectrogram" type="checkbox">high-resolution spectrogram (larger canvas, sharper)
+      </div>
+      <div>
           window size:
           <select class="analyzeSetting__select js-analyzeSetting-windowSize">
+              <option value="auto" class="js-analyzeSetting-windowSize-autoOpt">Auto</option>
               <option value="0">256</option>
               <option value="1">512</option>
               <option value="2">1024</option>
@@ -55,6 +61,18 @@ export default class AnalyzeSettingsComponent extends Component {
               <option value="5">8192</option>
               <option value="6">16384</option>
               <option value="7">32768</option>
+          </select>
+          window type:
+          <select class="analyzeSetting__select js-analyzeSetting-windowType">
+              <option value="0">Hann</option>
+              <option value="1">Hamming</option>
+              <option value="2">Blackman-Harris</option>
+              <option value="3">Triangular</option>
+          </select>
+          FFT backend:
+          <select class="analyzeSetting__select js-analyzeSetting-fftBackend">
+              <option value="0">Ooura (faster)</option>
+              <option value="1">Essentia WASM (multi-window)</option>
           </select>
       </div>
       <div>
@@ -75,7 +93,8 @@ export default class AnalyzeSettingsComponent extends Component {
       <div>
           <div>
               spectrogram amplitude range:
-              <input class="analyzeSetting__input js-analyzeSetting-spectrogramAmplitudeRange" type="number" step="10">dB ~ 0 dB
+              <input class="analyzeSetting__input js-analyzeSetting-spectrogramAmplitudeLow" type="number" step="10">dB ~
+              <input class="analyzeSetting__input js-analyzeSetting-spectrogramAmplitudeHigh" type="number" step="10">dB
           </div>
           <div>
               color:
@@ -124,19 +143,111 @@ export default class AnalyzeSettingsComponent extends Component {
       },
     );
 
+    const highResolutionSpectrogram = <HTMLInputElement>(
+      this._componentRoot.querySelector(
+        ".js-analyzeSetting-highResolutionSpectrogram",
+      )
+    );
+    highResolutionSpectrogram.checked = settings.highResolutionSpectrogram;
+    this._addEventlistener(highResolutionSpectrogram, EventType.CHANGE, () => {
+      settings.highResolutionSpectrogram = highResolutionSpectrogram.checked;
+    });
+    this._addEventlistener(
+      settings,
+      EventType.AS_UPDATE_HIGH_RESOLUTION_SPECTROGRAM,
+      (e: CustomEventInit) => {
+        highResolutionSpectrogram.checked = e.detail.value;
+      },
+    );
+
     // init fft window size index select
     const windowSizeSelect = <HTMLSelectElement>(
       this._componentRoot.querySelector(".js-analyzeSetting-windowSize")
     );
-    windowSizeSelect.selectedIndex = settings.windowSizeIndex;
+    const syncWindowSizeSelectUi = () => {
+      const opt = windowSizeSelect.querySelector<HTMLOptionElement>(
+        ".js-analyzeSetting-windowSize-autoOpt",
+      );
+      if (opt) {
+        opt.textContent = settings.fftWindowAuto
+          ? `Auto (${settings.inferredAutoWindowSamples})`
+          : "Auto";
+      }
+      if (settings.fftWindowAuto) {
+        windowSizeSelect.value = "auto";
+      } else {
+        windowSizeSelect.value = String(settings.windowSizeIndex);
+      }
+    };
+    syncWindowSizeSelectUi();
     this._addEventlistener(windowSizeSelect, EventType.CHANGE, () => {
-      settings.windowSizeIndex = Number(windowSizeSelect.selectedIndex);
+      const v = windowSizeSelect.value;
+      if (v === "auto") {
+        settings.fftWindowAuto = true;
+      } else {
+        settings.fftWindowAuto = false;
+        settings.windowSizeIndex = Number(v);
+      }
+      syncWindowSizeSelectUi();
     });
     this._addEventlistener(
       settings,
       EventType.AS_UPDATE_WINDOW_SIZE_INDEX,
+      () => {
+        syncWindowSizeSelectUi();
+      },
+    );
+    this._addEventlistener(
+      settings,
+      EventType.AS_UPDATE_FFT_WINDOW_AUTO,
+      () => {
+        syncWindowSizeSelectUi();
+      },
+    );
+    this._addEventlistener(
+      settings,
+      EventType.AS_UPDATE_MIN_TIME,
+      () => {
+        syncWindowSizeSelectUi();
+      },
+    );
+    this._addEventlistener(
+      settings,
+      EventType.AS_UPDATE_MAX_TIME,
+      () => {
+        syncWindowSizeSelectUi();
+      },
+    );
+
+    // init window type select
+    const windowTypeSelect = <HTMLSelectElement>(
+      this._componentRoot.querySelector(".js-analyzeSetting-windowType")
+    );
+    windowTypeSelect.selectedIndex = settings.windowType;
+    this._addEventlistener(windowTypeSelect, EventType.CHANGE, () => {
+      settings.windowType = Number(windowTypeSelect.selectedIndex) as WindowType;
+    });
+    this._addEventlistener(
+      settings,
+      EventType.AS_UPDATE_WINDOW_TYPE,
       (e: CustomEventInit) => {
-        windowSizeSelect.selectedIndex = e.detail.value;
+        windowTypeSelect.selectedIndex = e.detail.value;
+      },
+    );
+
+    // init fft backend select
+    const fftBackendSelect = <HTMLSelectElement>(
+      this._componentRoot.querySelector(".js-analyzeSetting-fftBackend")
+    );
+    fftBackendSelect.selectedIndex = settings.fftBackend;
+    this._addEventlistener(fftBackendSelect, EventType.CHANGE, () => {
+      settings.fftBackend = Number(fftBackendSelect.selectedIndex) as FftBackend;
+    });
+    this._addEventlistener(
+      settings,
+      EventType.AS_UPDATE_FFT_BACKEND,
+      (e: CustomEventInit) => {
+        fftBackendSelect.selectedIndex = e.detail.value;
       },
     );
 
@@ -265,35 +376,47 @@ export default class AnalyzeSettingsComponent extends Component {
       },
     );
 
-    // init spectrogram amplitude range input
-    const spectrogramAmplitudeRangeInput = <HTMLInputElement>(
+    // init spectrogram amplitude low input
+    const spectrogramAmplitudeLowInput = <HTMLInputElement>(
       this._componentRoot.querySelector(
-        ".js-analyzeSetting-spectrogramAmplitudeRange",
+        ".js-analyzeSetting-spectrogramAmplitudeLow",
       )
     );
-    spectrogramAmplitudeRangeInput.value = `${settings.spectrogramAmplitudeRange}`;
-    this.updateColorBar(settings);
-    this._addEventlistener(
-      spectrogramAmplitudeRangeInput,
-      EventType.CHANGE,
-      () => {
-        settings.spectrogramAmplitudeRange = Number(
-          spectrogramAmplitudeRangeInput.value,
-        );
-      },
-    );
+    spectrogramAmplitudeLowInput.value = `${settings.spectrogramAmplitudeLow}`;
+    this.updateColorBar(settings.toProps());
+    this._addEventlistener(spectrogramAmplitudeLowInput, EventType.CHANGE, () => {
+      settings.spectrogramAmplitudeLow = Number(spectrogramAmplitudeLowInput.value);
+    });
     this._addEventlistener(
       settings,
-      EventType.AS_UPDATE_SPECTROGRAM_AMPLITUDE_RANGE,
+      EventType.AS_UPDATE_SPECTROGRAM_AMPLITUDE_LOW,
       (e: CustomEventInit) => {
-        spectrogramAmplitudeRangeInput.value = `${e.detail.value}`;
-        this.updateColorBar(settings);
+        spectrogramAmplitudeLowInput.value = `${e.detail.value}`;
+        this.updateColorBar(settings.toProps());
+      },
+    );
+
+    // init spectrogram amplitude high input
+    const spectrogramAmplitudeHighInput = <HTMLInputElement>(
+      this._componentRoot.querySelector(
+        ".js-analyzeSetting-spectrogramAmplitudeHigh",
+      )
+    );
+    spectrogramAmplitudeHighInput.value = `${settings.spectrogramAmplitudeHigh}`;
+    this._addEventlistener(spectrogramAmplitudeHighInput, EventType.CHANGE, () => {
+      settings.spectrogramAmplitudeHigh = Number(spectrogramAmplitudeHighInput.value);
+    });
+    this._addEventlistener(
+      settings,
+      EventType.AS_UPDATE_SPECTROGRAM_AMPLITUDE_HIGH,
+      (e: CustomEventInit) => {
+        spectrogramAmplitudeHighInput.value = `${e.detail.value}`;
+        this.updateColorBar(settings.toProps());
       },
     );
   }
 
   private updateColorBar(settings: AnalyzeSettingsProps) {
-    // init color bar
     const colorCanvas = <HTMLCanvasElement>(
       this._componentRoot.querySelector(".js-analyzeSetting-spectrogramColor")
     );
@@ -304,28 +427,27 @@ export default class AnalyzeSettingsComponent extends Component {
     );
     const colorContext = colorCanvas.getContext("2d", { alpha: false });
     const colorAxisContext = colorAxisCanvas.getContext("2d", { alpha: false });
-    // clear axis label
-    colorAxisContext.clearRect(
-      0,
-      0,
-      colorAxisCanvas.width,
-      colorAxisCanvas.height,
-    );
-    // draw axis label
+
+    const low = settings.spectrogramAmplitudeLow;
+    const high = settings.spectrogramAmplitudeHigh;
+    const range = high - low;
+
+    colorAxisContext.clearRect(0, 0, colorAxisCanvas.width, colorAxisCanvas.height);
     colorAxisContext.font = `15px Arial`;
     colorAxisContext.fillStyle = "white";
     for (let i = 0; i < 10; i++) {
-      const amp = (i * settings.spectrogramAmplitudeRange) / 10;
+      const amp = low + (i * range) / 10;
       const x = (i * colorAxisCanvas.width) / 10;
-      colorAxisContext.fillText(`${amp} dB`, x, colorAxisCanvas.height);
+      colorAxisContext.fillText(`${amp.toFixed(0)} dB`, x, colorAxisCanvas.height);
     }
-    // draw color
+
     for (let i = 0; i < 100; i++) {
-      const amp = (i * settings.spectrogramAmplitudeRange) / 100;
+      const amp = low + (i * range) / 100;
       const x = (i * colorCanvas.width) / 100;
       colorContext.fillStyle = this._analyzeService.getSpectrogramColor(
         amp,
-        settings.spectrogramAmplitudeRange,
+        low,
+        high,
       );
       colorContext.fillRect(x, 0, colorCanvas.width / 100, colorCanvas.height);
     }

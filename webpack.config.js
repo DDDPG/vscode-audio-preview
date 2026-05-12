@@ -54,6 +54,7 @@ const webviewConfig = {
     alias: {
       fs: false,
       crypto: false,
+      "process/browser": require.resolve("process/browser.js"),
     },
   },
   module: {
@@ -71,7 +72,14 @@ const webviewConfig = {
         test: /\.css$/,
         use: ["style-loader", "css-loader"],
       },
+      {
+        test: /\.wasm$/,
+        type: "asset/resource",
+      },
     ],
+  },
+  experiments: {
+    asyncWebAssembly: true,
   },
   plugins: [
     new webpack.ProvidePlugin({

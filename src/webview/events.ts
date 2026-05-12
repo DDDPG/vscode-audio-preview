@@ -22,6 +22,8 @@ export class EventType {
     "as-update-spectrogram-visible";
   public static readonly AS_UPDATE_WINDOW_SIZE_INDEX =
     "as-update-window-size-index";
+  public static readonly AS_UPDATE_FFT_WINDOW_AUTO =
+    "as-update-fft-window-auto";
   public static readonly AS_UPDATE_FREQUENCY_SCALE =
     "as-update-frequency-scale";
   public static readonly AS_UPDATE_MEL_FILTER_NUM = "as-update-mel-filter-num";
@@ -33,6 +35,15 @@ export class EventType {
   public static readonly AS_UPDATE_MAX_AMPLITUDE = "as-update-max-amplitude";
   public static readonly AS_UPDATE_SPECTROGRAM_AMPLITUDE_RANGE =
     "as-update-spectrogram-amplitude-range";
+  public static readonly AS_UPDATE_SPECTROGRAM_AMPLITUDE_LOW =
+    "as-update-spectrogram-amplitude-low";
+  public static readonly AS_UPDATE_SPECTROGRAM_AMPLITUDE_HIGH =
+    "as-update-spectrogram-amplitude-high";
+  public static readonly AS_UPDATE_WINDOW_TYPE = "as-update-window-type";
+  public static readonly AS_UPDATE_FFT_BACKEND = "as-update-fft-backend";
+  public static readonly AS_UPDATE_HIGH_RESOLUTION_SPECTROGRAM =
+    "as-update-high-resolution-spectrogram";
+  public static readonly UPDATE_PLAYBACK_POSITION = "update-playback-position";
   // other
   public static readonly CLICK = "click";
   public static readonly CHANGE = "change";
@@ -43,7 +54,30 @@ export class EventType {
   public static readonly MOUSE_MOVE = "mousemove";
   public static readonly MOUSE_UP = "mouseup";
   public static readonly CONTEXT_MENU = "contextmenu";
+  /** Hover readout for waveform / spectrogram (dispatched on `window`). */
+  public static readonly CURSOR_READOUT = "wav-preview-cursor-readout";
 }
+
+/** Payload for {@link EventType.CURSOR_READOUT} (CustomEvent on `window`). */
+export type CursorReadoutPayload =
+  | { kind: "clear" }
+  | {
+      kind: "waveform";
+      channelIndex: number;
+      rms: number;
+      peak: number;
+      /** Nominal RMS window length in seconds (= STFT window / sample rate). */
+      rmsWindowDurationSec: number;
+    }
+  | {
+      kind: "spectrogram";
+      channelIndex: number;
+      rms: number;
+      peak: number;
+      frequencyHz: number;
+      /** Nominal RMS window length in seconds (= STFT window / sample rate). */
+      rmsWindowDurationSec: number;
+    };
 
 export class DisposableEventListener extends Disposable {
   private _target: EventTarget;

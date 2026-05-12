@@ -2,6 +2,7 @@ export interface Config {
   autoAnalyze: boolean;
   playerDefault: PlayerDefault;
   analyzeDefault: AnalyzeDefault;
+  fileExt?: string;
 }
 
 export interface PlayerDefault {
@@ -124,6 +125,11 @@ export interface AnalyzeDefault {
   */
   windowSizeIndex: number;
 
+  /**
+   * When true, FFT size follows the visible time range (see AnalyzeSettingsService).
+   */
+  fftWindowAuto?: boolean;
+
   // Range of frequency displayed on the figure. [0,sampleRate/2]
   // default: 0
   minFrequency: number;
@@ -148,4 +154,28 @@ export interface AnalyzeDefault {
   // Number of filter in melFilterBank. [20, 200]
   // default: 40
   melFilterNum: number;
+
+  /** Window type for STFT (Hann, Hamming, …). Matches WindowType enum. */
+  windowType?: number;
+
+  /** FFT backend. 0 = Ooura (faster), 1 = Essentia WASM (multi-window). Matches FftBackend enum. */
+  fftBackend?: number;
+
+  /** Spectrogram dB colormap lower bound (e.g. -90). */
+  spectrogramAmplitudeLow?: number;
+
+  /** Spectrogram dB colormap upper bound (e.g. 0). */
+  spectrogramAmplitudeHigh?: number;
+
+  /**
+   * When true, spectrogram canvases use higher pixel dimensions for a sharper plot
+   * (more STFT columns per canvas width).
+   */
+  highResolutionSpectrogram?: boolean;
+
+  /**
+   * When true (default), the extension remembers analyze UI settings between files.
+   * Controlled by WavPreview.cacheAnalyzeUi; not applied by the webview directly.
+   */
+  cacheAnalyzeUi?: boolean;
 }

@@ -109,6 +109,7 @@ export default class AnalyzerComponent extends Component {
           this._analyzeSettingsService,
           this._audioBuffer,
           settings,
+          ch,
         );
       }
 
@@ -120,9 +121,12 @@ export default class AnalyzerComponent extends Component {
 
         new SpectrogramComponent(
           `${this._componentRootSelector} .analyzeResultBox .${canvasBoxClass}`,
-          AnalyzeSettingsService.SPECTROGRAM_CANVAS_WIDTH,
-          AnalyzeSettingsService.SPECTROGRAM_CANVAS_HEIGHT *
-            this._analyzeSettingsService.spectrogramVerticalScale,
+          AnalyzeSettingsService.spectrogramRenderWidth(
+            this._analyzeSettingsService.highResolutionSpectrogram,
+          ),
+          AnalyzeSettingsService.spectrogramRenderHeightBase(
+            this._analyzeSettingsService.highResolutionSpectrogram,
+          ) * this._analyzeSettingsService.spectrogramVerticalScale,
           this._analyzeService,
           settings,
           this._audioBuffer.sampleRate,
@@ -138,6 +142,7 @@ export default class AnalyzerComponent extends Component {
           this._analyzeSettingsService,
           this._audioBuffer,
           settings,
+          ch,
         );
       }
     }

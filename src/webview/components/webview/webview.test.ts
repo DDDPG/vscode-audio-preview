@@ -1,5 +1,5 @@
 import { ExtMessageType, WebviewMessageType } from "../../../message";
-import Decoder from "../../decoder";
+import { IAudioDecoder } from "../../decoders/audioDecoderInterface";
 import Webview from "./webview";
 import {
   waitVSCodeMessageForAction,
@@ -23,7 +23,7 @@ describe("webview", () => {
 
   test("request config after init", async () => {
     const createDecoder = async () => {
-      return new Promise<Decoder>((resolve) => {
+      return new Promise<IAudioDecoder>((resolve) => {
         resolve({
           numChannels: 1,
           sampleRate: 44100,
@@ -36,7 +36,7 @@ describe("webview", () => {
           readAudioInfo: () => {},
           decode: () => {},
           dispose: () => {},
-        } as Decoder);
+        } as IAudioDecoder);
       });
     };
 
@@ -167,7 +167,7 @@ describe("webview error handling", () => {
       throw new Error("error in webview");
     };
     const createDecoder = async () => {
-      return new Promise<Decoder>((resolve) => {
+      return new Promise<IAudioDecoder>((resolve) => {
         resolve({
           numChannels: 1,
           sampleRate: 44100,
@@ -180,7 +180,7 @@ describe("webview error handling", () => {
           readAudioInfo: readAudioInfo,
           decode: () => {},
           dispose: () => {},
-        } as Decoder);
+        } as IAudioDecoder);
       });
     };
 

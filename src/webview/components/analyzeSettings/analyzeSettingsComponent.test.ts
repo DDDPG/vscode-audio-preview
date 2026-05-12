@@ -101,23 +101,18 @@ describe("analyzeSettingsComponent", () => {
     const windowSizeSelect = <HTMLSelectElement>(
       document.querySelector(".js-analyzeSetting-windowSize")
     );
-    windowSizeSelect.selectedIndex = index;
+    windowSizeSelect.value = String(index);
     windowSizeSelect.dispatchEvent(new Event(EventType.CHANGE));
     expect(analyzeSettingsService.windowSize).toBe(windowSize);
   });
-  test("window-size-select should be updated when recieving update-window-size-index event", () => {
+  test("window-size-select should be updated when window size index changes on service", () => {
     const index = getRandomInt(0, 7);
-    analyzeSettingsService.dispatchEvent(
-      new CustomEvent(EventType.AS_UPDATE_WINDOW_SIZE_INDEX, {
-        detail: {
-          value: index,
-        },
-      }),
-    );
+    analyzeSettingsService.fftWindowAuto = false;
+    analyzeSettingsService.windowSizeIndex = index;
     const windowSizeSelect = <HTMLSelectElement>(
       document.querySelector(".js-analyzeSetting-windowSize")
     );
-    expect(windowSizeSelect.selectedIndex).toBe(index);
+    expect(windowSizeSelect.value).toBe(String(index));
   });
 
   test("frequency scale should be updated when user change frequency-scale-select", () => {
@@ -330,31 +325,46 @@ describe("analyzeSettingsComponent", () => {
     expect(Number(maxAmplitudeInput.value)).toBeCloseTo(maxAmplitude);
   });
 
-  test("spectrogram-amplitude-range should be updated when user change spectrogram-amplitude-range-input", () => {
-    const spectrogramAmplitudeRange = getRandomFloat(-90, 0);
-    const spectrogramAmplitudeRangeInput = <HTMLInputElement>(
-      document.querySelector(".js-analyzeSetting-spectrogramAmplitudeRange")
+  test("spectrogramAmplitudeLow should be updated when user changes spectrogramAmplitudeLow input", () => {
+    const low = getRandomFloat(-90, -10);
+    const lowInput = <HTMLInputElement>(
+      document.querySelector(".js-analyzeSetting-spectrogramAmplitudeLow")
     );
-    spectrogramAmplitudeRangeInput.value = spectrogramAmplitudeRange.toString();
-    spectrogramAmplitudeRangeInput.dispatchEvent(new Event(EventType.CHANGE));
-    expect(analyzeSettingsService.spectrogramAmplitudeRange).toBeCloseTo(
-      spectrogramAmplitudeRange,
-    );
+    lowInput.value = low.toString();
+    lowInput.dispatchEvent(new Event(EventType.CHANGE));
+    expect(analyzeSettingsService.spectrogramAmplitudeLow).toBeCloseTo(low);
   });
-  test("spectrogram-amplitude-range-input should be updated when recieving update-spectrogram-amplitude-range event", () => {
-    const spectrogramAmplitudeRange = getRandomFloat(-90, 0);
+  test("spectrogramAmplitudeLow input should be updated when receiving AS_UPDATE_SPECTROGRAM_AMPLITUDE_LOW event", () => {
+    const low = getRandomFloat(-90, -10);
     analyzeSettingsService.dispatchEvent(
-      new CustomEvent(EventType.AS_UPDATE_SPECTROGRAM_AMPLITUDE_RANGE, {
-        detail: {
-          value: spectrogramAmplitudeRange,
-        },
+      new CustomEvent(EventType.AS_UPDATE_SPECTROGRAM_AMPLITUDE_LOW, {
+        detail: { value: low },
       }),
     );
-    const spectrogramAmplitudeRangeInput = <HTMLInputElement>(
-      document.querySelector(".js-analyzeSetting-spectrogramAmplitudeRange")
+    const lowInput = <HTMLInputElement>(
+      document.querySelector(".js-analyzeSetting-spectrogramAmplitudeLow")
     );
-    expect(Number(spectrogramAmplitudeRangeInput.value)).toBeCloseTo(
-      spectrogramAmplitudeRange,
+    expect(Number(lowInput.value)).toBeCloseTo(low);
+  });
+  test("spectrogramAmplitudeHigh should be updated when user changes spectrogramAmplitudeHigh input", () => {
+    const high = getRandomFloat(-10, 0);
+    const highInput = <HTMLInputElement>(
+      document.querySelector(".js-analyzeSetting-spectrogramAmplitudeHigh")
     );
+    highInput.value = high.toString();
+    highInput.dispatchEvent(new Event(EventType.CHANGE));
+    expect(analyzeSettingsService.spectrogramAmplitudeHigh).toBeCloseTo(high);
+  });
+  test("spectrogramAmplitudeHigh input should be updated when receiving AS_UPDATE_SPECTROGRAM_AMPLITUDE_HIGH event", () => {
+    const high = getRandomFloat(-10, 0);
+    analyzeSettingsService.dispatchEvent(
+      new CustomEvent(EventType.AS_UPDATE_SPECTROGRAM_AMPLITUDE_HIGH, {
+        detail: { value: high },
+      }),
+    );
+    const highInput = <HTMLInputElement>(
+      document.querySelector(".js-analyzeSetting-spectrogramAmplitudeHigh")
+    );
+    expect(Number(highInput.value)).toBeCloseTo(high);
   });
 });

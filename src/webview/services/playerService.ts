@@ -10,7 +10,28 @@ export default class PlayerService extends Service {
   private _isPlaying: boolean = false;
   private _lastStartAcTime: number = 0;
   private _currentSec: number = 0;
+  private _playbackPosition: number = 0;
   private _source: AudioBufferSourceNode;
+
+  public get playbackPosition() {
+    return this._playbackPosition;
+  }
+
+  public setPlaybackPosition(sec: number) {
+    this._playbackPosition = Math.max(
+      0,
+      Math.min(sec, this._audioBuffer.duration),
+    );
+    this.dispatchEvent(
+      new CustomEvent(EventType.UPDATE_PLAYBACK_POSITION, {
+        detail: {
+          sec: this._playbackPosition,
+          percent:
+            (100 * this._playbackPosition) / this._audioBuffer.duration,
+        },
+      }),
+    );
+  }
 
   public get isPlaying() {
     return this._isPlaying;
@@ -114,10 +135,11 @@ export default class PlayerService extends Service {
     this._source.buffer = this._audioBuffer;
     this._source.connect(lastNode);
 
-    // play
+    // play from the stored playback position
     this._isPlaying = true;
+    this._currentSec = this._playbackPosition;
     this._lastStartAcTime = this._audioContext.currentTime;
-    this._source.start(this._audioContext.currentTime, this._currentSec);
+    this._source.start(this._audioContext.currentTime, this._playbackPosition);
 
     // update playing status
     this.dispatchEvent(
@@ -153,8 +175,17 @@ export default class PlayerService extends Service {
   }
 
   public tick() {
-    const current =
-      this._currentSec + this._audioContext.currentTime - this._lastStartAcTime;
+    // Prefer getOutputTimestamp for sub-buffer-size latency compensation
+    const ts =
+      typeof this._audioContext.getOutputTimestamp === "function"
+        ? this._audioContext.getOutputTimestamp()
+        : null;
+    const acTime =
+      ts && ts.contextTime > 0
+        ? ts.contextTime
+        : this._audioContext.currentTime;
+
+    const current = this._currentSec + acTime - this._lastStartAcTime;
     this._seekbarValue = (100 * current) / this._audioBuffer.duration;
 
     // update seek bar value

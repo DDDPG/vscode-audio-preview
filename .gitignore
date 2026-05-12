@@ -3,3 +3,5 @@
 *.vsix
 /dist
 .vscode-test
+.cursor
+.claude

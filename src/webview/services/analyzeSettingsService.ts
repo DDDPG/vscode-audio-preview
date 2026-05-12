@@ -14,10 +14,101 @@ export enum WindowSizeIndex {
   W32768 = 7,
 }
 
+/** Allowed STFT window lengths (samples), ascending. */
+export const FFT_WINDOW_SAMPLES = [
+  256, 512, 1024, 2048, 4096, 8192, 16384, 32768,
+] as const;
+
+/**
+ * Map an ideal FFT length to the nearest allowed window size (linear distance in samples).
+ */
+export function snapFftWindowSamples(ideal: number): number {
+  const clamped = Math.max(256, Math.min(32768, ideal));
+  let best: number = FFT_WINDOW_SAMPLES[0];
+  let bestScore = Infinity;
+  for (const n of FFT_WINDOW_SAMPLES) {
+    const score = Math.abs(n - clamped);
+    if (score < bestScore) {
+      bestScore = score;
+      best = n;
+    }
+  }
+  return best;
+}
+
+/**
+ * Infer FFT window (samples) for **music / speech**-like content from the visible
+ * time range `T` (s), sample rate `fs` (Hz), and spectrogram canvas width `W` (px).
+ *
+ * **Quasi-stationarity (literature):** speech is often taken as quasi-stationary on
+ * ~20–30 ms; tonal / musical structure evolves more slowly, and common STFT
+ * references cite ~40–60 ms as a useful analysis-window scale. We model a target
+ * physical window τ(T) = τ_lo + (τ_hi−τ_lo)(1−e^(−T/T_s)) so longer spans allow a
+ * slightly longer window for frequency detail without jumping immediately to large N.
+ *
+ * **Hop / overlap / canvas:** with this extension’s hop heuristic, time columns are
+ * roughly K ≈ W·1024 / (2N) when the “min rect width” branch dominates. We require
+ * K ≥ K_screen(T) with K_screen relaxed as T grows (longer views tolerate fewer columns
+ * and can use a larger n_fft). We then take min(N_stationary, N_canvas) so the
+ * stricter of “physical window” vs “keep enough time columns” wins—matching the
+ * observation that ~50 s views still favor 512 over 1024. Constants below were tuned
+ * so music/speech-style zoom levels land on sensible defaults at 44.1 kHz and W≈1800.
+ */
+export function inferFftWindowSamplesForTimeRange(
+  timeRangeSec: number,
+  sampleRate: number,
+  spectrogramCanvasWidth: number,
+): number {
+  const T = Math.max(1e-6, timeRangeSec);
+  const fs = Math.max(8000, sampleRate);
+  const W = Math.max(512, spectrogramCanvasWidth);
+
+  const tauLo = 0.009;
+  const tauHi = 0.051;
+  const tauS = 138;
+  const tauStat =
+    tauLo + (tauHi - tauLo) * (1 - Math.exp(-T / tauS));
+  const nStationary = tauStat * fs;
+
+  const kFloor = 410;
+  const kScreen = Math.max(
+    kFloor,
+    735 +
+      1520 * Math.exp(-T / 7.1) +
+      785 * Math.exp(-T / 98) +
+      1.1 * T,
+  );
+  const nCanvas = (W * 1024) / (2 * kScreen);
+
+  let nIdeal = Math.min(nStationary, nCanvas);
+  const longViewSec = 275;
+  const longViewWindowMs = 39.2;
+  if (T > longViewSec) {
+    nIdeal = Math.max(
+      nIdeal,
+      Math.min(nStationary, (longViewWindowMs / 1000) * fs),
+    );
+  }
+
+  return snapFftWindowSamples(Math.min(8192, Math.max(256, nIdeal)));
+}
+
 export enum FrequencyScale {
   Linear = 0,
   Log = 1,
   Mel = 2,
+}
+
+export enum WindowType {
+  Hann = 0,
+  Hamming = 1,
+  BlackmanHarris = 2,
+  Triangular = 3,
+}
+
+export enum FftBackend {
+  Ooura = 0,
+  Essentia = 1,
 }
 
 export interface AnalyzeSettingsProps {
@@ -32,8 +123,12 @@ export interface AnalyzeSettingsProps {
   minAmplitude: number;
   maxAmplitude: number;
   spectrogramAmplitudeRange: number;
+  spectrogramAmplitudeLow: number;
+  spectrogramAmplitudeHigh: number;
   frequencyScale: number;
   melFilterNum: number;
+  windowType: WindowType;
+  fftBackend: FftBackend;
 }
 
 export default class AnalyzeSettingsService extends Service {
@@ -45,6 +140,16 @@ export default class AnalyzeSettingsService extends Service {
   public static readonly SPECTROGRAM_CANVAS_HEIGHT = 600;
   public static readonly SPECTROGRAM_CANVAS_VERTICAL_SCALE_MAX = 2.0;
   public static readonly SPECTROGRAM_CANVAS_VERTICAL_SCALE_MIN = 0.2;
+
+  /** Spectrogram canvas width used when high-resolution mode is off. */
+  public static spectrogramRenderWidth(highRes: boolean): number {
+    return highRes ? 3600 : AnalyzeSettingsService.SPECTROGRAM_CANVAS_WIDTH;
+  }
+
+  /** Base spectrogram canvas height (before vertical scale) when high-resolution is off. */
+  public static spectrogramRenderHeightBase(highRes: boolean): number {
+    return highRes ? 900 : AnalyzeSettingsService.SPECTROGRAM_CANVAS_HEIGHT;
+  }
 
   private _sampleRate: number;
   private _duration: number;
@@ -63,6 +168,55 @@ export default class AnalyzeSettingsService extends Service {
   public set autoCalsHopSize(value: boolean) {
     this._autoCalcHopSize = value;
   }
+
+  private _highResolutionSpectrogram: boolean = false;
+  public get highResolutionSpectrogram(): boolean {
+    return this._highResolutionSpectrogram;
+  }
+  public set highResolutionSpectrogram(value: boolean) {
+    this._highResolutionSpectrogram = value === true;
+    this.dispatchEvent(
+      new CustomEvent(EventType.AS_UPDATE_HIGH_RESOLUTION_SPECTROGRAM, {
+        detail: { value: this._highResolutionSpectrogram },
+      }),
+    );
+    if (this._autoCalcHopSize) {
+      this.hopSize = this.calcHopSize();
+    }
+  }
+
+  private _fftWindowAuto: boolean = false;
+  public get fftWindowAuto(): boolean {
+    return this._fftWindowAuto;
+  }
+  public set fftWindowAuto(value: boolean) {
+    this._fftWindowAuto = value === true;
+    if (this._fftWindowAuto) {
+      this.applyInferredBaseWindowAndHop();
+    } else {
+      this._windowSize = 2 ** (this._windowSizeIndex + 8);
+      if (this._autoCalcHopSize) {
+        this._hopSize = this.calcHopSize();
+      }
+    }
+    this.dispatchEvent(
+      new CustomEvent(EventType.AS_UPDATE_FFT_WINDOW_AUTO, {
+        detail: { value: this._fftWindowAuto },
+      }),
+    );
+  }
+
+  /** Inferred FFT length for the current time range (for UI label when auto). */
+  public get inferredAutoWindowSamples(): number {
+    const T = Math.max(1e-9, this._maxTime - this._minTime);
+    return inferFftWindowSamplesForTimeRange(
+      T,
+      this._sampleRate,
+      AnalyzeSettingsService.spectrogramRenderWidth(this._highResolutionSpectrogram),
+    );
+  }
+
+  private _persistHook?: () => void;
 
   private _waveformVisible: boolean;
   public get waveformVisible() {
@@ -127,7 +281,9 @@ export default class AnalyzeSettingsService extends Service {
       WindowSizeIndex.W1024,
     );
     this._windowSizeIndex = windowSizeIndex;
-    this.windowSize = 2 ** (windowSizeIndex + 8);
+    if (!this._fftWindowAuto) {
+      this.windowSize = 2 ** (windowSizeIndex + 8);
+    }
     this.dispatchEvent(
       new CustomEvent(EventType.AS_UPDATE_WINDOW_SIZE_INDEX, {
         detail: { value: this._windowSizeIndex },
@@ -210,11 +366,23 @@ export default class AnalyzeSettingsService extends Service {
       this._duration,
     );
     this._minTime = minTime;
+    if (this._fftWindowAuto) {
+      this.applyInferredBaseWindowAndHop();
+    } else if (this._autoCalcHopSize) {
+      this._hopSize = this.calcHopSize();
+    }
     this.dispatchEvent(
       new CustomEvent(EventType.AS_UPDATE_MIN_TIME, {
         detail: { value: this._minTime },
       }),
     );
+    if (this._fftWindowAuto) {
+      this.dispatchEvent(
+        new CustomEvent(EventType.AS_UPDATE_FFT_WINDOW_AUTO, {
+          detail: { value: true },
+        }),
+      );
+    }
   }
 
   private _maxTime: number;
@@ -231,11 +399,23 @@ export default class AnalyzeSettingsService extends Service {
       this._duration,
     );
     this._maxTime = maxTime;
+    if (this._fftWindowAuto) {
+      this.applyInferredBaseWindowAndHop();
+    } else if (this._autoCalcHopSize) {
+      this._hopSize = this.calcHopSize();
+    }
     this.dispatchEvent(
       new CustomEvent(EventType.AS_UPDATE_MAX_TIME, {
         detail: { value: this._maxTime },
       }),
     );
+    if (this._fftWindowAuto) {
+      this.dispatchEvent(
+        new CustomEvent(EventType.AS_UPDATE_FFT_WINDOW_AUTO, {
+          detail: { value: true },
+        }),
+      );
+    }
   }
 
   private _minAmplitude: number;
@@ -301,6 +481,48 @@ export default class AnalyzeSettingsService extends Service {
     );
   }
 
+  private _spectrogramAmplitudeLow: number;
+  public get spectrogramAmplitudeLow() {
+    return this._spectrogramAmplitudeLow;
+  }
+  public set spectrogramAmplitudeLow(value: number) {
+    const [low] = getRangeValues(
+      value,
+      this._spectrogramAmplitudeHigh,
+      -1000,
+      0,
+      -90,
+      0,
+    );
+    this._spectrogramAmplitudeLow = low;
+    this.dispatchEvent(
+      new CustomEvent(EventType.AS_UPDATE_SPECTROGRAM_AMPLITUDE_LOW, {
+        detail: { value: this._spectrogramAmplitudeLow },
+      }),
+    );
+  }
+
+  private _spectrogramAmplitudeHigh: number;
+  public get spectrogramAmplitudeHigh() {
+    return this._spectrogramAmplitudeHigh;
+  }
+  public set spectrogramAmplitudeHigh(value: number) {
+    const [, high] = getRangeValues(
+      this._spectrogramAmplitudeLow,
+      value,
+      -1000,
+      0,
+      -90,
+      0,
+    );
+    this._spectrogramAmplitudeHigh = high;
+    this.dispatchEvent(
+      new CustomEvent(EventType.AS_UPDATE_SPECTROGRAM_AMPLITUDE_HIGH, {
+        detail: { value: this._spectrogramAmplitudeHigh },
+      }),
+    );
+  }
+
   private _frequencyScale: FrequencyScale;
   public get frequencyScale() {
     return this._frequencyScale;
@@ -315,6 +537,33 @@ export default class AnalyzeSettingsService extends Service {
     this.dispatchEvent(
       new CustomEvent(EventType.AS_UPDATE_FREQUENCY_SCALE, {
         detail: { value: this._frequencyScale },
+      }),
+    );
+  }
+
+  private _windowType: WindowType;
+  public get windowType() {
+    return this._windowType;
+  }
+  public set windowType(value: WindowType) {
+    const windowType = getValueInEnum(value, WindowType, WindowType.Hann);
+    this._windowType = windowType;
+    this.dispatchEvent(
+      new CustomEvent(EventType.AS_UPDATE_WINDOW_TYPE, {
+        detail: { value: this._windowType },
+      }),
+    );
+  }
+
+  private _fftBackend: FftBackend = FftBackend.Ooura;
+  public get fftBackend() {
+    return this._fftBackend;
+  }
+  public set fftBackend(value: FftBackend) {
+    this._fftBackend = getValueInEnum(value, FftBackend, FftBackend.Ooura);
+    this.dispatchEvent(
+      new CustomEvent(EventType.AS_UPDATE_FFT_BACKEND, {
+        detail: { value: this._fftBackend },
       }),
     );
   }
@@ -349,6 +598,9 @@ export default class AnalyzeSettingsService extends Service {
     minAmplitude: number,
     maxAmplitude: number,
     spectrogramAmplitudeRange: number,
+    spectrogramAmplitudeLow: number,
+    spectrogramAmplitudeHigh: number,
+    windowType: WindowType,
   ) {
     super();
     this._defaultSetting = defaultSetting;
@@ -365,6 +617,9 @@ export default class AnalyzeSettingsService extends Service {
     this._minAmplitude = minAmplitude;
     this._maxAmplitude = maxAmplitude;
     this._spectrogramAmplitudeRange = spectrogramAmplitudeRange;
+    this._spectrogramAmplitudeLow = spectrogramAmplitudeLow;
+    this._spectrogramAmplitudeHigh = spectrogramAmplitudeHigh;
+    this._windowType = windowType;
   }
 
   public static fromDefaultSetting(
@@ -403,6 +658,9 @@ export default class AnalyzeSettingsService extends Service {
       min,
       max,
       -90,
+      -90,
+      0,
+      WindowType.Hann,
     );
 
     // set min & max amplitude of audio buffer to instance
@@ -451,6 +709,28 @@ export default class AnalyzeSettingsService extends Service {
     setting.spectrogramAmplitudeRange =
       defaultSetting.spectrogramAmplitudeRange;
 
+    // init spectrogram amplitude from defaults (cached / workspace)
+    setting.spectrogramAmplitudeLow =
+      defaultSetting.spectrogramAmplitudeLow ?? -90;
+    setting.spectrogramAmplitudeHigh =
+      defaultSetting.spectrogramAmplitudeHigh ?? 0;
+
+    // init window type from defaults
+    if (defaultSetting.windowType !== undefined) {
+      setting.windowType = defaultSetting.windowType as WindowType;
+    } else {
+      setting.windowType = WindowType.Hann;
+    }
+
+    if (defaultSetting.fftBackend !== undefined) {
+      setting.fftBackend = defaultSetting.fftBackend as FftBackend;
+    }
+
+    setting.highResolutionSpectrogram =
+      defaultSetting.highResolutionSpectrogram === true;
+
+    setting.fftWindowAuto = defaultSetting.fftWindowAuto === true;
+
     return setting;
   }
 
@@ -469,6 +749,34 @@ export default class AnalyzeSettingsService extends Service {
     this.maxFrequency = this._defaultSetting.maxFrequency;
   }
 
+  private applyInferredBaseWindowAndHop(): void {
+    if (!this._fftWindowAuto) {
+      return;
+    }
+    const T = Math.max(1e-9, this._maxTime - this._minTime);
+    this._windowSize = inferFftWindowSamplesForTimeRange(
+      T,
+      this._sampleRate,
+      AnalyzeSettingsService.spectrogramRenderWidth(this._highResolutionSpectrogram),
+    );
+    if (this._autoCalcHopSize) {
+      this._hopSize = this.calcHopSize();
+    }
+  }
+
+  private get effectiveBaseWindowIndex(): number {
+    if (this._fftWindowAuto) {
+      const T = Math.max(1e-9, this._maxTime - this._minTime);
+      const n = inferFftWindowSamplesForTimeRange(
+        T,
+        this._sampleRate,
+        AnalyzeSettingsService.spectrogramRenderWidth(this._highResolutionSpectrogram),
+      );
+      return Math.round(Math.log2(n)) - 8;
+    }
+    return this._windowSizeIndex;
+  }
+
   /*
   Calc hopsize
   This hopSize make rectWidth greater than minRectWidth for every duration of input.
@@ -477,22 +785,82 @@ export default class AnalyzeSettingsService extends Service {
   Use a minimum hopSize to prevent from becoming too small for short periods of data.
   */
   private calcHopSize() {
-    const minRectWidth = (2 * this.windowSize) / 1024;
+    const n = this.effectiveWindowSize;
+    const minRectWidth = (2 * n) / 1024;
     const fullSampleNum = (this.maxTime - this.minTime) * this._sampleRate;
     const enoughHopSize = Math.trunc(
       (minRectWidth * fullSampleNum) /
-        AnalyzeSettingsService.SPECTROGRAM_CANVAS_WIDTH,
+        AnalyzeSettingsService.spectrogramRenderWidth(
+          this._highResolutionSpectrogram,
+        ),
     );
-    const minHopSize = this.windowSize / 32;
+    const minHopSize = n / 32;
     const hopSize = Math.max(enoughHopSize, minHopSize);
     return hopSize;
+  }
+
+  /*
+  Returns a window size boosted by zoom level so that zoomed-in views have
+  higher frequency resolution. Capped at W8192 (index 5) to avoid OOM on
+  very narrow ranges.
+  */
+  private get effectiveWindowSize(): number {
+    const totalDuration = this._duration;
+    const currentRange = this._maxTime - this._minTime;
+    if (
+      !totalDuration ||
+      !currentRange ||
+      currentRange >= totalDuration
+    ) {
+      return this._windowSize;
+    }
+    const zoomRatio = totalDuration / currentRange;
+    const maxEffectiveIndex = 5; // W8192
+    const effectiveIndex = Math.min(
+      this.effectiveBaseWindowIndex + Math.floor(Math.log2(zoomRatio)),
+      maxEffectiveIndex,
+    );
+    return Math.pow(2, effectiveIndex + 8);
+  }
+
+  public setPersistHook(hook: (() => void) | undefined): void {
+    this._persistHook = hook;
+  }
+
+  public dispatchEvent(event: Event): boolean {
+    const ok = super.dispatchEvent(event);
+    this._persistHook?.();
+    return ok;
+  }
+
+  public toCachedDefaults(): Record<string, unknown> {
+    return {
+      waveformVisible: this.waveformVisible,
+      waveformVerticalScale: this.waveformVerticalScale,
+      spectrogramVisible: this.spectrogramVisible,
+      spectrogramVerticalScale: this.spectrogramVerticalScale,
+      windowSizeIndex: this._windowSizeIndex,
+      fftWindowAuto: this._fftWindowAuto,
+      frequencyScale: this.frequencyScale,
+      melFilterNum: this.melFilterNum,
+      minFrequency: this.minFrequency,
+      maxFrequency: this.maxFrequency,
+      minAmplitude: this.minAmplitude,
+      maxAmplitude: this.maxAmplitude,
+      spectrogramAmplitudeRange: this.spectrogramAmplitudeRange,
+      spectrogramAmplitudeLow: this.spectrogramAmplitudeLow,
+      spectrogramAmplitudeHigh: this.spectrogramAmplitudeHigh,
+      windowType: this.windowType,
+      highResolutionSpectrogram: this.highResolutionSpectrogram,
+      fftBackend: this.fftBackend,
+    };
   }
 
   public toProps(): AnalyzeSettingsProps {
     return {
       waveformVerticalScale: this.waveformVerticalScale,
       spectrogramVerticalScale: this.spectrogramVerticalScale,
-      windowSize: this.windowSize,
+      windowSize: this.effectiveWindowSize,
       hopSize: this.hopSize,
       minFrequency: this.minFrequency,
       maxFrequency: this.maxFrequency,
@@ -501,8 +869,12 @@ export default class AnalyzeSettingsService extends Service {
       minAmplitude: this.minAmplitude,
       maxAmplitude: this.maxAmplitude,
       spectrogramAmplitudeRange: this.spectrogramAmplitudeRange,
+      spectrogramAmplitudeLow: this.spectrogramAmplitudeLow,
+      spectrogramAmplitudeHigh: this.spectrogramAmplitudeHigh,
       frequencyScale: this.frequencyScale,
       melFilterNum: this.melFilterNum,
+      windowType: this.windowType,
+      fftBackend: this.fftBackend,
     };
   }
 }

@@ -4,6 +4,15 @@ import {
   FrequencyScale,
   AnalyzeSettingsProps,
 } from "../../services/analyzeSettingsService";
+import {
+  SpectrogramRenderer,
+  isWebGL2Supported,
+  padLogBounds,
+} from "./spectrogramRenderer";
+import {
+  hzToPiecewiseEqualSegmentY,
+  piecewiseLogAxisBoundaries,
+} from "../../spectrogramFrequencyLayout";
 
 export default class WaveFormComponent {
   private _analyzeService: AnalyzeService;
@@ -36,24 +45,82 @@ export default class WaveFormComponent {
     switch (settings.frequencyScale) {
       case FrequencyScale.Linear:
         this.drawLinearAxis(axisCanvas, settings, ch, numOfCh);
-        this.drawLinearSpectrogram(canvas, sampleRate, settings, ch);
+        if (isWebGL2Supported(canvas)) {
+          this.drawSpectrogramWebGL(canvas, sampleRate, settings, ch, FrequencyScale.Linear);
+        } else {
+          this.drawLinearSpectrogram(canvas, sampleRate, settings, ch);
+        }
         break;
       case FrequencyScale.Log:
-        /*
-        if minFrequency = 0, logscaled minimum value is log10(Number.EPSILON)
-        however, in this case the values are too small, making the graph less readable 
-        so set minFrequency = 1
-        */
-        if (settings.minFrequency < 1) {
-          settings.minFrequency = 1;
-        }
         this.drawLogAxis(axisCanvas, settings, ch, numOfCh);
-        this.drawLogSpectrogram(canvas, sampleRate, settings, ch);
+        if (isWebGL2Supported(canvas)) {
+          this.drawSpectrogramWebGL(canvas, sampleRate, settings, ch, FrequencyScale.Log);
+        } else {
+          this.drawLogSpectrogram(canvas, sampleRate, settings, ch);
+        }
         break;
       case FrequencyScale.Mel:
         this.drawMelAxis(axisCanvas, settings, ch, numOfCh);
-        this.drawMelSpectrogram(canvas, sampleRate, settings, ch);
+        if (isWebGL2Supported(canvas)) {
+          this.drawSpectrogramWebGL(canvas, sampleRate, settings, ch, FrequencyScale.Mel);
+        } else {
+          this.drawMelSpectrogram(canvas, sampleRate, settings, ch);
+        }
         break;
+    }
+  }
+
+  private drawSpectrogramWebGL(
+    canvas: HTMLCanvasElement,
+    sampleRate: number,
+    settings: AnalyzeSettingsProps,
+    ch: number,
+    scale: FrequencyScale,
+  ) {
+    const spectrogram =
+      scale === FrequencyScale.Mel
+        ? this._analyzeService.getMelSpectrogram(ch, settings)
+        : this._analyzeService.getSpectrogram(ch, settings);
+
+    const fMin = settings.minFrequency;
+    const fMax = settings.maxFrequency;
+    const eps = 1e-6;
+    const logMin = Math.log10(Math.max(fMin, eps));
+    const logMax = Math.log10(Math.max(fMax, 1e-6));
+    const melMin = AnalyzeService.hzToMel(fMin);
+    const melMax = AnalyzeService.hzToMel(fMax);
+    const freqMode =
+      scale === FrequencyScale.Log ? 1 : scale === FrequencyScale.Mel ? 2 : 0;
+    const logBounds = piecewiseLogAxisBoundaries(fMin, fMax);
+    const { count: logBoundCount, padded: logBoundsPadded } =
+      padLogBounds(logBounds);
+
+    try {
+      const renderer = new SpectrogramRenderer(canvas);
+      renderer.render(
+        spectrogram,
+        settings.spectrogramAmplitudeLow,
+        settings.spectrogramAmplitudeHigh,
+        freqMode,
+        fMin,
+        fMax,
+        logMin,
+        logMax,
+        melMin,
+        melMax,
+        logBoundCount,
+        logBoundsPadded,
+      );
+      renderer.dispose();
+    } catch {
+      // WebGL2 init failed at runtime – fall back to Canvas2D
+      if (scale === FrequencyScale.Linear) {
+        this.drawLinearSpectrogram(canvas, sampleRate, settings, ch);
+      } else if (scale === FrequencyScale.Log) {
+        this.drawLogSpectrogram(canvas, sampleRate, settings, ch);
+      } else {
+        this.drawMelSpectrogram(canvas, sampleRate, settings, ch);
+      }
     }
   }
 
@@ -114,7 +181,8 @@ export default class WaveFormComponent {
         const value = spectrogram[i][j];
         context.fillStyle = this._analyzeService.getSpectrogramColor(
           value,
-          settings.spectrogramAmplitudeRange,
+          settings.spectrogramAmplitudeLow,
+          settings.spectrogramAmplitudeHigh,
         );
         context.fillRect(x, y, rectWidth, rectHeight);
       }
@@ -130,24 +198,21 @@ export default class WaveFormComponent {
     // draw horizontal axis
     this.drawTimeAxis(axisCanvas, settings);
 
-    // draw vertical axis
+    // Vertical axis: endpoints fixed at settings min/max Hz; ticks 0 (if allowed), 100, 200, 400, …
     const axisContext = axisCanvas.getContext("2d");
     const width = axisCanvas.width;
     const height = axisCanvas.height;
     axisContext.font = `20px Arial`;
 
-    const logMin = Math.log10(settings.minFrequency + Number.EPSILON);
-    const logMax = Math.log10(settings.maxFrequency + Number.EPSILON);
-    const scale = (logMax - logMin) / height;
-    const numAxes = Math.round(10 * settings.spectrogramVerticalScale);
-    for (let i = 0; i < numAxes; i++) {
+    const minF = settings.minFrequency;
+    const maxF = settings.maxFrequency;
+    const bounds = piecewiseLogAxisBoundaries(minF, maxF);
+    const n = bounds.length;
+    const segH = n > 1 ? height / (n - 1) : height;
+    for (let k = 0; k < n; k++) {
+      const y = height - k * segH;
       axisContext.fillStyle = "rgb(245,130,32)";
-
-      // Convert the frequency to the logarithmic scale
-      const logFreq = logMin + (i * (logMax - logMin)) / numAxes;
-      const f = Math.pow(10, logFreq);
-      const y = height - (logFreq - logMin) / scale;
-      axisContext.fillText(`${Math.trunc(f)}`, 4, y - 4);
+      axisContext.fillText(`${Math.trunc(bounds[k])}`, 4, y - 4);
 
       axisContext.fillStyle = "rgb(180,120,20)";
       for (let j = 0; j < width; j++) {
@@ -174,27 +239,30 @@ export default class WaveFormComponent {
     const rectWidth = (width * settings.hopSize) / wholeSampleNum;
 
     const df = sampleRate / settings.windowSize;
-    // calculate the height of each frequency band in the logarithmic scale
-    const logMin = Math.log10(settings.minFrequency + Number.EPSILON);
-    const logMax = Math.log10(settings.maxFrequency + Number.EPSILON);
-    const scale = (logMax - logMin) / height;
+    const minF = settings.minFrequency;
+    const maxF = settings.maxFrequency;
+    const bounds = piecewiseLogAxisBoundaries(minF, maxF);
+
+    const minFreqIndex = Math.floor(settings.minFrequency / df);
 
     for (let i = 0; i < spectrogram.length; i++) {
       const x = i * rectWidth;
       for (let j = 0; j < spectrogram[i].length; j++) {
-        // convert the frequency index to the logarithmic scale
-        const freq = j * df;
-        const logFreq = Math.log10(freq + Number.EPSILON);
-        const logPrevFreq = Math.log10((j - 1) * df + Number.EPSILON);
-        const y = height - (logFreq - logMin) / scale;
-        const rectHeight = (logFreq - logPrevFreq) / scale;
+        const absJ = j + minFreqIndex;
+        const freq = absJ * df;
+        const prevFreq = Math.max(1e-6, (absJ - 1) * df);
+        const y0 = hzToPiecewiseEqualSegmentY(freq, bounds, height);
+        const y1 = hzToPiecewiseEqualSegmentY(prevFreq, bounds, height);
+        const top = Math.min(y0, y1);
+        const rectHeight = Math.max(1, Math.abs(y1 - y0));
 
         const value = spectrogram[i][j];
         context.fillStyle = this._analyzeService.getSpectrogramColor(
           value,
-          settings.spectrogramAmplitudeRange,
+          settings.spectrogramAmplitudeLow,
+          settings.spectrogramAmplitudeHigh,
         );
-        context.fillRect(x, y, rectWidth, rectHeight);
+        context.fillRect(x, top, rectWidth, rectHeight);
       }
     }
   }
@@ -215,13 +283,19 @@ export default class WaveFormComponent {
     axisContext.font = `20px Arial`;
 
     const numAxes = Math.round(10 * settings.spectrogramVerticalScale);
-    for (let i = 0; i < numAxes; i++) {
-      axisContext.fillStyle = "rgb(245,130,32)";
-      const y = Math.round((i * height) / numAxes);
-      const maxMel = AnalyzeService.hzToMel(settings.maxFrequency);
-      const minMel = AnalyzeService.hzToMel(settings.minFrequency);
-      const mel = ((numAxes - i) * (maxMel - minMel)) / numAxes + minMel;
+    const minMel = AnalyzeService.hzToMel(settings.minFrequency);
+    const maxMel = AnalyzeService.hzToMel(settings.maxFrequency);
+    const melSpan = maxMel - minMel;
+    if (melSpan <= 0) {
+      this.drawChannelLabel(axisCanvas, ch, numOfCh);
+      return;
+    }
+    for (let i = 0; i <= numAxes; i++) {
+      const mel = minMel + (i * melSpan) / numAxes;
       const f = AnalyzeService.melToHz(mel);
+      const y = height - ((mel - minMel) / melSpan) * height;
+
+      axisContext.fillStyle = "rgb(245,130,32)";
       axisContext.fillText(`${Math.trunc(f)}`, 4, y - 4);
 
       axisContext.fillStyle = "rgb(180,120,20)";
@@ -256,7 +330,8 @@ export default class WaveFormComponent {
         const value = spectrogram[i][j];
         context.fillStyle = this._analyzeService.getSpectrogramColor(
           value,
-          settings.spectrogramAmplitudeRange,
+          settings.spectrogramAmplitudeLow,
+          settings.spectrogramAmplitudeHigh,
         );
         context.fillRect(x, y, rectWidth, rectHeight);
       }

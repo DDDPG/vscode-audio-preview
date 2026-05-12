@@ -1,6 +1,6 @@
 import "./styles/vscode.css";
 import { WebviewMessage } from "../message";
-import Decoder from "./decoder";
+import { createDecoder as createNewDecoder } from "./decoders/decoderFactory";
 import WebView from "./components/webview/webview";
 
 export interface vscode {
@@ -19,9 +19,5 @@ function createAudioContext(sampleRate: number) {
   return new AudioContext({ sampleRate });
 }
 
-function createDecoder(fileData: Uint8Array) {
-  return Decoder.create(fileData);
-}
-
 // entry point
-new WebView(postMessage, createAudioContext, createDecoder);
+new WebView(postMessage, createAudioContext, createNewDecoder);

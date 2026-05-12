@@ -39,6 +39,9 @@ export default class PlayerComponent extends Component {
         <div class="seekBarBox">
             <input type="range" class="seekBar" value="0" />
             <input type="range" class="userInputSeekBar inputSeekBar" value="0" />
+            <div class="progressTrack">
+              <div class="progressFill" style="transform: scaleX(0); transform-origin: left center; width: 100%; height: 100%;"></div>
+            </div>
         </div>
       </div>
     `;
@@ -59,8 +62,11 @@ export default class PlayerComponent extends Component {
     const visibleSeekbar = <HTMLInputElement>(
       this._componentRoot.querySelector(".seekBar")
     );
-    const seekPosText = <HTMLInputElement>(
+    const seekPosText = <HTMLElement>(
       this._componentRoot.querySelector(".seekPosText")
+    );
+    const progressFill = <HTMLElement>(
+      this._componentRoot.querySelector(".progressFill")
     );
     this._addEventlistener(
       this._playerService,
@@ -69,6 +75,9 @@ export default class PlayerComponent extends Component {
         visibleSeekbar.value = e.detail.value;
         seekPosText.textContent =
           "position " + Number(e.detail.pos).toFixed(3) + " s";
+        // Drive progress bar via scaleX to avoid layout reflow
+        const scale = Math.min(1, Math.max(0, e.detail.value / 100));
+        progressFill.style.transform = `scaleX(${scale})`;
       },
     );
 

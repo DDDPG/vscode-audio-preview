@@ -48,6 +48,7 @@ export class WebviewMessageType {
   public static readonly DATA = "DATA";
   public static readonly WRITE_WAV = "WRITE_WAV";
   public static readonly ERROR = "RELOAD";
+  public static readonly SAVE_ANALYZE_UI = "SAVE_ANALYZE_UI";
 
   public static isCONFIG(msg: WebviewMessage): msg is WebviewConfigMessage {
     return msg.type === WebviewMessageType.CONFIG;
@@ -64,13 +65,20 @@ export class WebviewMessageType {
   public static isERROR(msg: WebviewMessage): msg is WebviewErrorMessage {
     return msg.type === WebviewMessageType.ERROR;
   }
+
+  public static isSaveAnalyzeUi(
+    msg: WebviewMessage,
+  ): msg is WebviewSaveAnalyzeUiMessage {
+    return msg.type === WebviewMessageType.SAVE_ANALYZE_UI;
+  }
 }
 
 export type WebviewMessage =
   | WebviewConfigMessage
   | WebviewDataMessage
   | WebviewWriteWavMessage
-  | WebviewErrorMessage;
+  | WebviewErrorMessage
+  | WebviewSaveAnalyzeUiMessage;
 
 export class WebviewConfigMessage {
   type = WebviewMessageType.CONFIG;
@@ -103,6 +111,11 @@ export class WebviewErrorMessage {
 
 export interface WebviewErrorMessageData {
   message: string;
+}
+
+export class WebviewSaveAnalyzeUiMessage {
+  type = WebviewMessageType.SAVE_ANALYZE_UI;
+  data: Record<string, unknown>;
 }
 
 // Type of post message funtion

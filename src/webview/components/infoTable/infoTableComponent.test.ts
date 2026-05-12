@@ -57,4 +57,8 @@ describe("infoTableComponent", () => {
       document.querySelector(".js-infoTableData-duration")?.textContent,
     ).toBe("12.3 s");
   });
+
+  afterAll(() => {
+    infoTableComponent.dispose();
+  });
 });

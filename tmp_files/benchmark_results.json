@@ -1,0 +1,55 @@
+{
+  "stft": [
+    {
+      "duration": "10s",
+      "frames": 861,
+      "ooura_ms": 12.53,
+      "essentia_ms_extrapolated": 113.21,
+      "speedup": 0.11
+    },
+    {
+      "duration": "60s",
+      "frames": 5167,
+      "ooura_ms": 74.87,
+      "essentia_ms_extrapolated": 679.37,
+      "speedup": 0.11
+    },
+    {
+      "duration": "300s",
+      "frames": 25839,
+      "ooura_ms": 386.44,
+      "essentia_ms_extrapolated": 3397.35,
+      "speedup": 0.11
+    }
+  ],
+  "rendering": [
+    {
+      "duration": "10s",
+      "frames": 862,
+      "total_pixels": 882688,
+      "canvas2d_ms": 1.48,
+      "webgl2_texture_pack_ms": 0.27,
+      "speedup": 5.48
+    },
+    {
+      "duration": "60s",
+      "frames": 5168,
+      "total_pixels": 5292032,
+      "canvas2d_ms": 8.13,
+      "webgl2_texture_pack_ms": 1.5,
+      "speedup": 5.42
+    },
+    {
+      "duration": "300s",
+      "frames": 25840,
+      "total_pixels": 26460160,
+      "canvas2d_ms": 40.88,
+      "webgl2_texture_pack_ms": 6,
+      "speedup": 6.81
+    }
+  ],
+  "decoder": {
+    "cold_ms": 3.94,
+    "warm_ms": 0.15
+  }
+}

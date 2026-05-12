@@ -10,6 +10,7 @@ import { AnalyzeDefault } from "../../config";
 import AnalyzeSettingsService, {
   FrequencyScale,
   WindowSizeIndex,
+  inferFftWindowSamplesForTimeRange,
 } from "./analyzeSettingsService";
 
 describe("analyzeSettingsService", () => {
@@ -198,6 +199,16 @@ describe("analyzeSettingsService", () => {
     expect(as.windowSize).toBe(windowSize);
   });
 
+  test("inferFftWindowSamplesForTimeRange uses time–frequency tradeoff bands", () => {
+    const fs = 44100;
+    const W = AnalyzeSettingsService.SPECTROGRAM_CANVAS_WIDTH;
+    expect(inferFftWindowSamplesForTimeRange(4, fs, W)).toBe(512);
+    expect(inferFftWindowSamplesForTimeRange(18, fs, W)).toBe(512);
+    expect(inferFftWindowSamplesForTimeRange(51, fs, W)).toBe(512);
+    expect(inferFftWindowSamplesForTimeRange(56, fs, W)).toBe(512);
+    expect(inferFftWindowSamplesForTimeRange(90, fs, W)).toBe(1024);
+    expect(inferFftWindowSamplesForTimeRange(300, fs, W)).toBe(2048);
+  });
   // frequencyScale
   test("frequencyScale should be Linear if no default value is provided", () => {
     const as = AnalyzeSettingsService.fromDefaultSetting(
