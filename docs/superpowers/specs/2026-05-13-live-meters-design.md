@@ -183,6 +183,169 @@ No essentia.js dependency. Pure Web Audio API + Canvas 2D.
 
 ---
 
+## Frontend Implementation Details
+
+### Design Constraints
+
+This is a VSCode webview extension. All UI must integrate with the host theme:
+- **No custom fonts** — use `var(--vscode-font-family)` and `var(--vscode-editor-font-family)` (monospace for numeric readouts)
+- **No hardcoded colors for chrome** — all borders, backgrounds, text use VSCode CSS variables
+- **Canvas drawing colors** are the exception: signal colors (green/yellow/red for levels, cyan for goniometer points) are hardcoded because they carry semantic meaning independent of theme
+
+### CSS Variables (new, in `liveMeters.css`)
+
+```css
+:root {
+  /* Layout */
+  --live-meter-width: 48px;           /* right column fixed width */
+  --live-column-border: 1px solid var(--vscode-foreground);
+
+  /* Canvas signal colors — theme-independent */
+  --meter-green:  #4caf50;
+  --meter-yellow: #ffeb3b;
+  --meter-red:    #f44336;
+  --meter-peak-hold: rgba(255, 255, 255, 0.85);
+  --meter-clip-active: #f44336;
+  --meter-clip-inactive: rgba(244, 67, 54, 0.2);
+
+  --spectrum-fill: rgba(100, 181, 246, 0.35);   /* blue-ish fill under curve */
+  --spectrum-stroke: #64b5f6;                    /* curve line */
+  --spectrum-grid: rgba(255, 255, 255, 0.08);    /* grid lines */
+  --spectrum-label: var(--vscode-foreground);    /* axis labels */
+
+  --gonioMeter-bg: #0d0d0d;
+  --gonioMeter-grid: rgba(255, 255, 255, 0.07);
+  --gonioMeter-axis: rgba(255, 255, 255, 0.18);
+  --gonioMeter-point: #00e5ff;                   /* cyan dots */
+  --gonioMeter-corr-positive: #4caf50;
+  --gonioMeter-corr-negative: #f44336;
+}
+```
+
+### Layout & Sizing
+
+**Root layout** (`webview.ts`) uses CSS Grid:
+```css
+.root {
+  display: grid;
+  /* base: waveform+spectrogram | [live column] | [meter column] */
+  grid-template-columns: 1fr [live-col-width] [meter-col-width];
+}
+```
+- `[live-col-width]` is set via JS as a CSS custom property `--live-col-width` on the root element, recalculated by `ResizeObserver`
+- `[meter-col-width]` is `var(--live-meter-width)` (48px), or `0` when hidden
+- Both columns use `display: none` when their toggle is off — no layout remnants
+
+**Middle column height split** (between Goniometer and Spectrum Analyzer):
+- Default: 50/50
+- Drag handle: a 4px tall `div.resize-handle` with `cursor: ns-resize`, updates a CSS custom property `--split-ratio` on the container
+- Min height per panel: 120px
+
+**Fullscreen overlay:**
+```css
+.live-analysis-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: var(--vscode-editor-background);
+  display: grid;
+  grid-template-rows: 1fr 4px 1fr;  /* top panel, handle, bottom panel */
+}
+```
+Triggered by expand button; dismissed by `keydown:Escape` and `contextmenu` (right-click).
+
+### Level Meter Canvas
+
+**Canvas dimensions:** width = `--live-meter-width / 2 - 1px` per channel (two bars side by side with 1px gap), height = full column height.
+
+**Drawing order per frame:**
+1. `clearRect` full canvas
+2. Draw RMS bar (bottom-up): color determined by `smoothedRms` value against thresholds
+3. Draw Peak bar on top of RMS bar (same color, slightly brighter: `filter: brightness(1.3)` — achieved by using a lighter shade constant)
+4. Draw peak hold line: 2px horizontal line, `--meter-peak-hold` color
+5. Draw clip LED: 6×6px rect at top, color `--meter-clip-active` or `--meter-clip-inactive`
+6. Draw scale ticks and labels on rightmost channel only (to save space): right-aligned, `9px var(--vscode-editor-font-family)`
+
+**dBFS → canvas Y mapping:**
+```ts
+// dbMin = -60, dbMax = 0
+const y = canvasH * (1 - (db - dbMin) / (dbMax - dbMin));
+// clamp to [0, canvasH]
+```
+
+**Channel labels:** "L" and "R" in `10px var(--vscode-font-family)`, centered above each bar, color `var(--vscode-foreground)` at 60% opacity.
+
+### Spectrum Analyzer Canvas
+
+**Canvas fills its container** (4:3 aspect ratio container, canvas is `width: 100%; height: 100%`).
+
+**Padding inside canvas** (for axis labels): `left: 36px, bottom: 20px, top: 8px, right: 8px`. The drawable area is the remaining rect.
+
+**Grid lines:**
+- Vertical: one per frequency tick (20, 50, 100, 200, 500, 1k, 2k, 5k, 10k, 20k Hz) — `--spectrum-grid` color, 1px
+- Horizontal: one per dB tick (0, -12, -24, -36, -48, -60, -90) — same
+
+**Curve rendering:**
+- After interpolation, build a `Path2D` from the 300 points
+- Stroke with `--spectrum-stroke`, lineWidth 1.5px
+- Fill from curve down to bottom edge with `--spectrum-fill`
+
+**Axis labels:** `9px var(--vscode-editor-font-family)`, color `--spectrum-label`
+- Frequency labels: centered below each vertical grid line, abbreviated (e.g. "1k", "10k")
+- dB labels: right-aligned in the left padding area
+
+### Goniometer Canvas
+
+**Canvas is square** — enforced by JS: `canvas.height = canvas.width` on resize.
+
+**Drawing order per frame:**
+1. Fill background `--gonioMeter-bg` (do NOT clearRect — background fill is the clear)
+2. Draw concentric circles (r = 0.25, 0.5, 0.75, 1.0 × half-canvas): `--gonioMeter-grid`, 1px
+3. Draw X-axis and Y-axis lines: `--gonioMeter-grid`, 1px
+4. Draw ±45° diagonal reference lines (the "X" shape): `--gonioMeter-axis`, 1px, dashed `[4, 4]`
+5. Draw all buffered points: iterate ring buffer, set `ctx.globalAlpha = point.alpha`, fillRect 1.5×1.5px at mapped coords, color `--gonioMeter-point`
+6. Reset `globalAlpha = 1`
+
+**Coordinate mapping:**
+```ts
+const px = cx + x * (canvasW / 2) * 0.9;   // 0.9 = margin factor
+const py = cy - y * (canvasH / 2) * 0.9;
+```
+
+**Info panel** (below square canvas, within 4:3 container):
+- Correlation bar: full-width `<div>` with a centered fill, color interpolated between `--gonioMeter-corr-negative` (red, corr=-1) → white (corr=0) → `--gonioMeter-corr-positive` (green, corr=+1)
+- Numeric readout: `"CC: +0.82"` in `11px var(--vscode-editor-font-family)`, right-aligned
+- Both use HTML elements (not canvas), styled with VSCode variables
+
+### Expand Button
+
+Positioned `absolute; top: 6px; right: 6px` within the live analysis container.
+
+```css
+.expand-btn {
+  width: 20px; height: 20px;
+  background: var(--vscode-button-secondaryBackground);
+  border: 1px solid var(--vscode-foreground);
+  color: var(--vscode-foreground);
+  font-size: 11px;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.15s;
+}
+.expand-btn:hover { opacity: 1; }
+```
+
+Icon: `⤢` (U+2922) or a simple SVG arrow-out-of-box (4 lines, no library).
+
+### Settings UI Additions (`analyzeSettingsComponent.ts`)
+
+New controls follow the exact same pattern as existing settings rows:
+- Toggle rows: `<label><input type="checkbox"> Show Level Meter</label>`
+- Select row: `<label>Live FFT Size <select><option>512...4096</option></select></label>`
+- Styled with existing `analyzeSetting__*` CSS classes — no new CSS needed for the settings panel itself
+
+---
+
 ## New Files
 
 | File | Purpose |
