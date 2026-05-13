@@ -18,15 +18,22 @@ export default class InfoTableComponent extends Component {
     fileSize: number,
     format: string,
     encoding: string,
+    bitDepth: number | null,
   ) {
     const channels =
       numChannels === 1 ? "mono" : numChannels === 2 ? "stereo" : "unsupported";
+
+    const bitDepthStr =
+      bitDepth != null && Number.isFinite(bitDepth)
+        ? `${bitDepth} bit`
+        : "—";
 
     const info = [
       { name: "encoding", value: `${encoding}` },
       { name: "format", value: `${format}` },
       { name: "number_of_channel", value: `${numChannels} ch (${channels})` },
       { name: "sample_rate", value: `${sampleRate.toLocaleString()} Hz` },
+      { name: "bit_depth", value: bitDepthStr },
       { name: "file_size", value: `${fileSize.toLocaleString()} bytes` },
     ];
 

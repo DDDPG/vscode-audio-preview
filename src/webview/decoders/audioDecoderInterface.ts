@@ -5,6 +5,8 @@ export interface IAudioDecoder {
   readonly length: number;
   readonly format: string;
   readonly encoding: string;
+  /** Stored PCM depth from container when known (WAV / FLAC); null for opaque decode (e.g. MP3). */
+  readonly bitDepth: number | null;
   readonly fileSize: number;
   readonly samples: Float32Array[];
   readAudioInfo(): void;

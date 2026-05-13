@@ -1,9 +1,11 @@
 import { IAudioDecoder } from "./audioDecoderInterface";
+import { parseWavBitsPerSample } from "../utils/audioFileBitDepth";
 
 export class WebAudioDecoder implements IAudioDecoder {
   private _data: Uint8Array;
   private _ext: string;
   private _audioBuffer: AudioBuffer | null = null;
+  private _fileBitDepth: number | null = null;
 
   constructor(data: Uint8Array, ext: string) {
     this._data = data;
@@ -28,6 +30,9 @@ export class WebAudioDecoder implements IAudioDecoder {
   get encoding() {
     return "PCM";
   }
+  get bitDepth() {
+    return this._fileBitDepth;
+  }
   get fileSize() {
     return this._data.byteLength;
   }
@@ -51,6 +56,11 @@ export class WebAudioDecoder implements IAudioDecoder {
   }
 
   async decodeAsync(): Promise<void> {
+    const ext = this._ext.toLowerCase().replace(/^\./, "");
+    this._fileBitDepth =
+      ext === "wav" || ext === "wave"
+        ? parseWavBitsPerSample(this._data)
+        : null;
     const ctx = new AudioContext();
     this._audioBuffer = await ctx.decodeAudioData(this._data.buffer.slice(0));
     await ctx.close();
@@ -58,5 +68,6 @@ export class WebAudioDecoder implements IAudioDecoder {
 
   dispose() {
     this._audioBuffer = null;
+    this._fileBitDepth = null;
   }
 }

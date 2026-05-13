@@ -30,6 +30,7 @@ describe("webview", () => {
           fileSize: 500001,
           format: "s16",
           encoding: "pcm_s16le",
+          bitDepth: 16,
           duration: 1,
           samples: [new Float32Array(44100)],
           length: 44100,
@@ -48,6 +49,17 @@ describe("webview", () => {
       );
     });
     expect(msg.type).toBe(WebviewMessageType.CONFIG);
+  });
+
+  test("root layout includes top chrome and settings dock", () => {
+    expect(document.getElementById("topChrome")).not.toBeNull();
+    expect(document.getElementById("settingsDock")).not.toBeNull();
+    expect(document.getElementById("settingTab")).not.toBeNull();
+    expect(document.getElementById("settingsFab")).not.toBeNull();
+    expect(document.querySelector(".settingsDock__fabRingBar")).not.toBeNull();
+    expect(document.querySelector(".js-settingsFabPercent")).not.toBeNull();
+    const sheet = document.getElementById("settingsSheet") as HTMLElement;
+    expect(sheet.hasAttribute("hidden")).toBe(true);
   });
 
   test("request data after getting config", async () => {
@@ -121,6 +133,9 @@ describe("webview", () => {
     });
     await wait(100);
     expect(document.getElementById("infoTable")?.innerHTML).not.toBe("");
+    const fab = document.getElementById("settingsFab") as HTMLButtonElement;
+    expect(fab.disabled).toBe(false);
+    expect(fab.getAttribute("aria-busy")).toBe("false");
   });
 
   test("init player after finish receiving data", async () => {
@@ -174,6 +189,7 @@ describe("webview error handling", () => {
           fileSize: 500001,
           format: "s16",
           encoding: "pcm_s16le",
+          bitDepth: 16,
           duration: 1,
           samples: [new Float32Array(44100)],
           length: 44100,

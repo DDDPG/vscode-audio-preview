@@ -1,20 +1,65 @@
 .settingTab {
-  border: 1px solid var(--vscode-foreground);
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  border: 1px solid var(--vscode-panel-border);
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--vscode-editor-background);
+}
+
+.settingTab__body {
+  display: flex;
+  flex-direction: row;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 
 .settingTab__menu {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
-  gap: 0.5em;
-  margin: 0.5em;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35em;
+  padding: 0.45em;
+  flex-shrink: 0;
+  width: 6.5rem;
+  box-sizing: border-box;
+  border-right: 1px solid var(--vscode-panel-border);
+  background: var(--vscode-sideBar-background);
 }
 
 .settingTab__button {
-  background: none;
+  width: 100%;
+  text-align: left;
+  padding: 0.35em 0.45em;
+  font-size: 0.85em;
+  background: transparent;
   color: var(--vscode-foreground);
-  border: 1px solid var(--vscode-foreground);
+  border: 1px solid transparent;
+  border-radius: 3px;
+  cursor: pointer;
+}
+
+.settingTab__button:hover {
+  background: var(--vscode-list-hoverBackground);
+}
+
+.settingTab__button:focus-visible {
+  outline: 1px solid var(--vscode-focusBorder);
+  outline-offset: -1px;
 }
 
 .settingTab__button--active {
-  background: var(--vscode-button-background);
+  background: var(--vscode-list-activeSelectionBackground);
+  color: var(--vscode-list-activeSelectionForeground);
+  border-color: var(--vscode-panel-border);
+}
+
+.settingTab__content {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0.5em;
 }

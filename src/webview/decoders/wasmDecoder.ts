@@ -1,4 +1,5 @@
 import { IAudioDecoder } from "./audioDecoderInterface";
+import { parseFlacBitsPerSample } from "../utils/audioFileBitDepth";
 
 type WasmDecoderResult = {
   channelData: Float32Array[];
@@ -75,6 +76,7 @@ export class WasmDecoder implements IAudioDecoder {
   private _data: Uint8Array;
   private _ext: string;
   private _result: WasmDecoderResult | null = null;
+  private _fileBitDepth: number | null = null;
 
   constructor(data: Uint8Array, ext: string) {
     this._data = data;
@@ -100,6 +102,9 @@ export class WasmDecoder implements IAudioDecoder {
   get encoding() {
     return "PCM";
   }
+  get bitDepth() {
+    return this._fileBitDepth;
+  }
   get fileSize() {
     return this._data.byteLength;
   }
@@ -120,9 +125,13 @@ export class WasmDecoder implements IAudioDecoder {
     if (!this._result) {
       throw new Error(`WasmDecoder: failed to decode .${this._ext}`);
     }
+    const ext = this._ext.toLowerCase().replace(/^\./, "");
+    this._fileBitDepth =
+      ext === "flac" ? parseFlacBitsPerSample(this._data) : null;
   }
 
   dispose() {
     this._result = null;
+    this._fileBitDepth = null;
   }
 }

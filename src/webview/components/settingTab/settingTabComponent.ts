@@ -9,8 +9,12 @@ import AnalyzeSettingsComponent from "../analyzeSettings/analyzeSettingsComponen
 import EasyCutComponent from "../easyCut/easyCutComponent";
 import { PostMessage } from "../../../message";
 
+const FOCUSABLE_SELECTOR =
+  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 export default class SettingTab extends Component {
   private _componentRoot: HTMLElement;
+  private _dockOpen = false;
 
   constructor(
     coponentRootSelector: string,
@@ -26,25 +30,24 @@ export default class SettingTab extends Component {
 
     this._componentRoot.innerHTML = `
       <div class="settingTab">
-        <div class="settingTab__menu">
-          <div>Setting</div>
-          <button class="settingTab__button settingTab__button--active js-settingTabButton-hide">hide</button>
-          <button class="settingTab__button js-settingTabButton-player">player</button>
-          <button class="settingTab__button js-settingTabButton-analyze">analyze</button>
-          <button class="settingTab__button js-settingTabButton-easyCut">easyCut</button>
-        </div>
-        <div class="settingTab__content">
-          <div class="js-settingTabContent-player"></div>
-          <div class="js-settingTabContent-analyze"></div>
-          <div class="js-settingTabContent-easyCut"></div>
+        <div class="settingTab__body">
+          <div class="settingTab__menu" role="tablist" aria-orientation="vertical" aria-label="Setting sections">
+            <button type="button" class="settingTab__button settingTab__button--active js-settingTabButton-hide">hide</button>
+            <button type="button" class="settingTab__button js-settingTabButton-player">player</button>
+            <button type="button" class="settingTab__button js-settingTabButton-analyze">analyze</button>
+            <button type="button" class="settingTab__button js-settingTabButton-easyCut">easyCut</button>
+          </div>
+          <div class="settingTab__content">
+            <div class="js-settingTabContent-player"></div>
+            <div class="js-settingTabContent-analyze"></div>
+            <div class="js-settingTabContent-easyCut"></div>
+          </div>
         </div>
       </div>
     `;
 
-    // hide is default
     this.hideAllContent();
 
-    // create tab content
     new PlayerSettingsComponent(
       `${coponentRootSelector} .js-settingTabContent-player`,
       playerSettingsService,
@@ -63,7 +66,6 @@ export default class SettingTab extends Component {
       postMessage,
     );
 
-    // hide tab event
     const hideTabButton = this._componentRoot.querySelector(
       ".js-settingTabButton-hide",
     ) as HTMLButtonElement;
@@ -73,7 +75,6 @@ export default class SettingTab extends Component {
       hideTabButton.classList.add("settingTab__button--active");
     });
 
-    // player tab event
     const playerTabButton = this._componentRoot.querySelector(
       ".js-settingTabButton-player",
     ) as HTMLButtonElement;
@@ -87,7 +88,6 @@ export default class SettingTab extends Component {
       playerTabButton.classList.add("settingTab__button--active");
     });
 
-    // analyze tab event
     const analyzeTabButton = this._componentRoot.querySelector(
       ".js-settingTabButton-analyze",
     ) as HTMLButtonElement;
@@ -101,7 +101,6 @@ export default class SettingTab extends Component {
       analyzeTabButton.classList.add("settingTab__button--active");
     });
 
-    // easyCut tab event
     const easyCutTabButton = this._componentRoot.querySelector(
       ".js-settingTabButton-easyCut",
     ) as HTMLButtonElement;
@@ -114,13 +113,105 @@ export default class SettingTab extends Component {
       easyCutTabContent.style.display = "block";
       easyCutTabButton.classList.add("settingTab__button--active");
     });
+
+    this._initSettingsDock();
+  }
+
+  private _initSettingsDock() {
+    const dock = this._componentRoot.closest("#settingsDock");
+    if (!dock) {
+      return;
+    }
+
+    const fab = dock.querySelector(".js-settingsFab") as HTMLButtonElement | null;
+    const backdrop = dock.querySelector(".js-settingsBackdrop") as HTMLElement | null;
+    const sheet = dock.querySelector(".js-settingsSheet") as HTMLElement | null;
+    if (!fab || !backdrop || !sheet) {
+      return;
+    }
+
+    sheet.classList.add("settingsDock__sheet--animating");
+
+    const closeSheet = () => {
+      if (!this._dockOpen) {
+        return;
+      }
+      this._dockOpen = false;
+      fab.setAttribute("aria-expanded", "false");
+      sheet.classList.remove("settingsDock__sheet--open");
+      backdrop.setAttribute("hidden", "");
+      sheet.setAttribute("hidden", "");
+      fab.focus();
+    };
+
+    const openSheet = () => {
+      if (this._dockOpen) {
+        return;
+      }
+      this._dockOpen = true;
+      fab.setAttribute("aria-expanded", "true");
+      backdrop.removeAttribute("hidden");
+      sheet.removeAttribute("hidden");
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          sheet.classList.add("settingsDock__sheet--open");
+        });
+      });
+      const firstTab = this._componentRoot.querySelector(
+        ".js-settingTabButton-hide",
+      ) as HTMLButtonElement | null;
+      firstTab?.focus();
+    };
+
+    const toggleSheet = () => {
+      if (this._dockOpen) {
+        closeSheet();
+      } else {
+        openSheet();
+      }
+    };
+
+    this._addEventlistener(fab, EventType.CLICK, toggleSheet);
+    this._addEventlistener(backdrop, EventType.CLICK, closeSheet);
+
+    this._addEventlistener(document, EventType.KEY_DOWN, (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || !this._dockOpen) {
+        return;
+      }
+      e.preventDefault();
+      closeSheet();
+    });
+
+    this._addEventlistener(sheet, EventType.KEY_DOWN, (e: KeyboardEvent) => {
+      if (!this._dockOpen || e.key !== "Tab") {
+        return;
+      }
+      const focusables = Array.from(
+        sheet.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR),
+      );
+      if (focusables.length === 0) {
+        return;
+      }
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = document.activeElement as HTMLElement | null;
+      if (e.shiftKey) {
+        if (active === first) {
+          e.preventDefault();
+          last.focus();
+        }
+      } else if (active === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    });
   }
 
   private resetActivebutton() {
     const activeButton = this._componentRoot.querySelector(
       ".settingTab__button--active",
-    ) as HTMLButtonElement;
-    activeButton.classList.remove("settingTab__button--active");
+    ) as HTMLButtonElement | null;
+    activeButton?.classList.remove("settingTab__button--active");
   }
 
   private hideAllContent() {

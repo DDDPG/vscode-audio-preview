@@ -25,6 +25,12 @@ import LiveMonitoringBarComponent from "../liveMeters/liveMonitoringBarComponent
 type CreateAudioContext = (sampleRate: number) => AudioContext;
 type CreateDecoder = (fileData: Uint8Array, ext: string) => Promise<IAudioDecoder>;
 
+/** Ring geometry matches viewBox / circle `r` in webview template (px). */
+const FAB_LOAD_RING_RADIUS_PX = 23;
+const FAB_LOAD_RING_CIRCUMFERENCE = 2 * Math.PI * FAB_LOAD_RING_RADIUS_PX;
+/** Portion of the ring reserved for file transfer into the webview (rest = decode + UI). */
+const LOAD_PROGRESS_RECEIVE_SHARE = 0.38;
+
 export default class WebView extends Component {
   private _fileData: Uint8Array;
 
@@ -35,6 +41,15 @@ export default class WebView extends Component {
 
   private _config: Config;
 
+  private _settingsFab: HTMLButtonElement | null = null;
+  private _fabPercentEl: HTMLSpanElement | null = null;
+  private _loadRingSvg: SVGSVGElement | null = null;
+  private _loadRingBar: SVGCircleElement | null = null;
+  private _decodeProgressRaf = 0;
+  private _decodeProgressStartedAt = 0;
+  private _visualLoadProgress = 0;
+  private _reduceMotion = false;
+
   constructor(
     postMessage: PostMessage,
     createAudioContext: CreateAudioContext,
@@ -44,6 +59,9 @@ export default class WebView extends Component {
     this._postMessage = postMessage;
     this._createAudioContext = createAudioContext;
     this._createDecoder = createDecoder;
+    this._register({
+      dispose: () => this._cancelDecodeProgressRaf(),
+    });
     this.initWebview();
   }
 
@@ -59,18 +77,199 @@ export default class WebView extends Component {
 
     const root = document.getElementById("root");
     root.innerHTML = `
-      <div id="infoTable"></div>
-      <div id="player"></div>
-      <div id="settingTab"></div>
+      <div id="topChrome" class="topChrome">
+        <div id="infoTable"></div>
+        <div id="player"></div>
+      </div>
       <div id="liveMonitoringBar"></div>
       <div id="mainVisualizer">
         <div id="analyzer"></div>
         <div id="liveMetersMiddle"></div>
         <div id="liveMetersRight"></div>
       </div>
+      <div id="settingsDock" class="settingsDock">
+        <button
+          type="button"
+          class="settingsDock__fab js-settingsFab"
+          id="settingsFab"
+          aria-expanded="false"
+          aria-controls="settingsSheet"
+          aria-haspopup="dialog"
+          aria-busy="false"
+          disabled
+          title="Loading audio…"
+        >
+          <svg
+            class="settingsDock__fabRingSvg settingsDock__fabRingSvg--hidden"
+            viewBox="0 0 52 52"
+            width="52"
+            height="52"
+            aria-hidden="true"
+            focusable="false"
+          >
+            <circle
+              class="settingsDock__fabRingTrack"
+              cx="26"
+              cy="26"
+              r="${FAB_LOAD_RING_RADIUS_PX}"
+              fill="none"
+              stroke-width="2"
+            />
+            <circle
+              class="settingsDock__fabRingBar"
+              cx="26"
+              cy="26"
+              r="${FAB_LOAD_RING_RADIUS_PX}"
+              fill="none"
+              stroke-width="2.75"
+              stroke-linecap="round"
+              transform="rotate(-90 26 26)"
+            />
+          </svg>
+          <span
+            class="settingsDock__fabPercent js-settingsFabPercent"
+            aria-hidden="true"
+          >0%</span>
+          <span class="settingsDock__fabIcon" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" stroke="currentColor" stroke-width="1.5"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c0 .66.39 1.26 1 1.51H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+            </svg>
+          </span>
+        </button>
+        <div class="settingsDock__backdrop js-settingsBackdrop" id="settingsBackdrop" hidden></div>
+        <div
+          class="settingsDock__sheet js-settingsSheet"
+          id="settingsSheet"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="settingsSheetTitle"
+          hidden
+        >
+          <div id="settingsSheetTitle" class="settingsDock__sheetTitle">Settings</div>
+          <div id="settingTab"></div>
+        </div>
+      </div>
     `;
 
     this._postMessage({ type: WebviewMessageType.CONFIG });
+
+    this._reduceMotion =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    this._settingsFab = document.getElementById(
+      "settingsFab",
+    ) as HTMLButtonElement | null;
+    this._fabPercentEl = this._settingsFab?.querySelector(
+      ".js-settingsFabPercent",
+    ) as HTMLSpanElement | null;
+    this._loadRingSvg = this._settingsFab?.querySelector(
+      ".settingsDock__fabRingSvg",
+    ) as SVGSVGElement | null;
+    this._loadRingBar = this._loadRingSvg?.querySelector(
+      ".settingsDock__fabRingBar",
+    ) as SVGCircleElement | null;
+    this._primeLoadRingGeometry();
+  }
+
+  private _primeLoadRingGeometry() {
+    if (!this._loadRingBar) {
+      return;
+    }
+    this._loadRingBar.style.strokeDasharray = `${FAB_LOAD_RING_CIRCUMFERENCE}`;
+    this._paintLoadRingProgress(0);
+  }
+
+  private _paintLoadRingProgress(unit: number) {
+    if (!this._loadRingBar) {
+      return;
+    }
+    const u = Math.max(0, Math.min(1, unit));
+    this._loadRingBar.style.strokeDashoffset = `${FAB_LOAD_RING_CIRCUMFERENCE * (1 - u)}`;
+    if (
+      this._settingsFab?.classList.contains("settingsDock__fab--loading") &&
+      this._fabPercentEl
+    ) {
+      const pct = Math.min(100, Math.max(0, Math.round(u * 100)));
+      this._fabPercentEl.textContent = `${pct}%`;
+    }
+  }
+
+  private _showLoadRing() {
+    this._settingsFab?.classList.add("settingsDock__fab--loading");
+    this._loadRingSvg?.classList.remove("settingsDock__fabRingSvg--hidden");
+    this._settingsFab?.setAttribute("aria-busy", "true");
+    this._settingsFab?.setAttribute("title", "Loading audio…");
+    this._paintLoadRingProgress(this._visualLoadProgress);
+  }
+
+  private _setReceiveLoadProgress(end: number, whole: number) {
+    if (whole <= 0) {
+      return;
+    }
+    const ratio = Math.min(1, end / whole);
+    this._visualLoadProgress = LOAD_PROGRESS_RECEIVE_SHARE * ratio;
+    this._paintLoadRingProgress(this._visualLoadProgress);
+    this._showLoadRing();
+  }
+
+  private _cancelDecodeProgressRaf() {
+    if (this._decodeProgressRaf !== 0) {
+      cancelAnimationFrame(this._decodeProgressRaf);
+      this._decodeProgressRaf = 0;
+    }
+  }
+
+  private _beginDecodePhaseProgress() {
+    this._cancelDecodeProgressRaf();
+    this._visualLoadProgress = Math.max(
+      this._visualLoadProgress,
+      LOAD_PROGRESS_RECEIVE_SHARE,
+    );
+    this._paintLoadRingProgress(this._visualLoadProgress);
+    if (this._reduceMotion) {
+      return;
+    }
+    this._decodeProgressStartedAt = performance.now();
+    const tick = () => {
+      const elapsed = performance.now() - this._decodeProgressStartedAt;
+      const headroom = 1 - LOAD_PROGRESS_RECEIVE_SHARE - 0.03;
+      const asymptote =
+        LOAD_PROGRESS_RECEIVE_SHARE +
+        headroom * (1 - Math.exp(-elapsed / 3200));
+      const target = Math.min(asymptote, 0.97);
+      this._visualLoadProgress += (target - this._visualLoadProgress) * 0.06;
+      this._paintLoadRingProgress(this._visualLoadProgress);
+      this._decodeProgressRaf = requestAnimationFrame(tick);
+    };
+    this._decodeProgressRaf = requestAnimationFrame(tick);
+  }
+
+  private _finishAndHideLoadRing(success: boolean) {
+    this._cancelDecodeProgressRaf();
+    this._paintLoadRingProgress(1);
+    if (!this._settingsFab) {
+      return;
+    }
+    this._settingsFab.setAttribute("aria-busy", "false");
+    if (success) {
+      this._settingsFab.disabled = false;
+      this._settingsFab.setAttribute("title", "Settings");
+    } else {
+      this._settingsFab.disabled = true;
+      this._settingsFab.setAttribute("title", "Could not load audio");
+    }
+    requestAnimationFrame(() => {
+      this._settingsFab?.classList.remove("settingsDock__fab--loading");
+    });
+    window.setTimeout(() => {
+      this._loadRingSvg?.classList.add("settingsDock__fabRingSvg--hidden");
+      this._visualLoadProgress = 0;
+      this._paintLoadRingProgress(0);
+      if (this._fabPercentEl) {
+        this._fabPercentEl.textContent = "0%";
+      }
+    }, 220);
   }
 
   private async onReceiveMessage(msg: ExtMessage) {
@@ -93,6 +292,9 @@ export default class WebView extends Component {
           if (!this._fileData) {
             console.log("start receiving data");
             this._fileData = new Uint8Array(msg.data.wholeLength);
+            this._visualLoadProgress = 0;
+            this._primeLoadRingGeometry();
+            this._showLoadRing();
           }
 
           // set fileData
@@ -101,6 +303,11 @@ export default class WebView extends Component {
           );
           const samples = new Uint8Array(msg.data.samples);
           this._fileData.set(samples, msg.data.start);
+
+          this._setReceiveLoadProgress(
+            msg.data.end,
+            msg.data.wholeLength,
+          );
 
           // request next data
           if (msg.data.end < msg.data.wholeLength) {
@@ -112,9 +319,16 @@ export default class WebView extends Component {
           }
 
           console.log("finish receiving data");
+          this._setReceiveLoadProgress(
+            msg.data.wholeLength,
+            msg.data.wholeLength,
+          );
+          this._beginDecodePhaseProgress();
           try {
             await this.activateUI();
+            this._finishAndHideLoadRing(true);
           } catch (err) {
+            this._finishAndHideLoadRing(false);
             this._postMessage({
               type: WebviewMessageType.ERROR,
               data: { message: err.message },
@@ -144,6 +358,7 @@ export default class WebView extends Component {
       decoder.fileSize,
       decoder.format,
       decoder.encoding,
+      decoder.bitDepth,
     );
 
     // decode audio data

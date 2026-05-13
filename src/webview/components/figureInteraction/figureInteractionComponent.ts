@@ -115,6 +115,14 @@ export default class FigureInteractionComponent extends Component {
 
     const fmtLin = (v: number) =>
       Number.isFinite(v) ? v.toFixed(5) : "—";
+    /** Linear amplitude (±1 full scale) → dBFS, aligned with live spectrum readout. */
+    const fmtDbfs = (lin: number) => {
+      if (!Number.isFinite(lin) || lin <= 0) {
+        return "—";
+      }
+      const db = 20 * Math.log10(lin);
+      return Number.isFinite(db) ? `${db.toFixed(1)} dBFS` : "—";
+    };
     const fmtRmsWindow = (sec: number) => {
       if (!Number.isFinite(sec) || sec <= 0) {
         return "";
@@ -152,7 +160,7 @@ export default class FigureInteractionComponent extends Component {
       if (d.kind === "waveform") {
         readoutEl.innerHTML = `Ch ${channelIndex + 1}<br>RMS ${fmtLin(d.rms)}<br>Peak ${fmtLin(d.peak)}${winHtml}`;
       } else {
-        readoutEl.innerHTML = `Ch ${channelIndex + 1}<br>RMS ${fmtLin(d.rms)}<br>Peak ${fmtLin(d.peak)}<br>${fmtHz(d.frequencyHz)}${winHtml}`;
+        readoutEl.innerHTML = `Ch ${channelIndex + 1}<br>RMS ${fmtDbfs(d.rms)}<br>Peak ${fmtDbfs(d.peak)}<br>${fmtHz(d.frequencyHz)}${winHtml}`;
       }
       if (crossV && crossH) {
         crossV.style.display = "block";

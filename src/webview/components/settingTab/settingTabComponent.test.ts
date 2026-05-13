@@ -8,13 +8,37 @@ import AnalyzeSettingsService from "../../services/analyzeSettingsService";
 import PlayerSettingsService from "../../services/playerSettingsService";
 import SettingTab from "./settingTabComponent";
 
+const SETTINGS_DOCK_HTML = `
+  <div id="settingsDock">
+    <button
+      type="button"
+      class="settingsDock__fab js-settingsFab"
+      id="settingsFab"
+      aria-expanded="false"
+      aria-controls="settingsSheet"
+      aria-haspopup="dialog"
+      title="Settings"
+    ></button>
+    <div class="settingsDock__backdrop js-settingsBackdrop" id="settingsBackdrop" hidden></div>
+    <div
+      class="settingsDock__sheet js-settingsSheet settingsDock__sheet--animating"
+      id="settingsSheet"
+      role="dialog"
+      aria-modal="true"
+      hidden
+    >
+      <div id="settingTab"></div>
+    </div>
+  </div>
+`;
+
 describe("settingTabComponent", () => {
   let playerSettingService: PlayerSettingsService;
   let analyzeService: AnalyzeService;
   let analyzeSettingsService: AnalyzeSettingsService;
   let settingTabComponent: SettingTab;
   beforeAll(() => {
-    document.body.innerHTML = '<div id="settingTab"></div>';
+    document.body.innerHTML = SETTINGS_DOCK_HTML;
     const audioBuffer = new MockAudioBuffer(
       44100,
       1,
@@ -47,8 +71,35 @@ describe("settingTabComponent", () => {
     settingTabComponent.dispose();
   });
 
+  test("FAB toggles settings sheet visibility", () => {
+    const fab = document.getElementById("settingsFab") as HTMLButtonElement;
+    const sheet = document.getElementById("settingsSheet") as HTMLElement;
+    expect(fab).toBeTruthy();
+    expect(sheet.hasAttribute("hidden")).toBe(true);
+
+    fab.click();
+    expect(sheet.hasAttribute("hidden")).toBe(false);
+    expect(fab.getAttribute("aria-expanded")).toBe("true");
+
+    fab.click();
+    expect(sheet.hasAttribute("hidden")).toBe(true);
+    expect(fab.getAttribute("aria-expanded")).toBe("false");
+  });
+
+  test("Escape closes the settings sheet when open", () => {
+    const fab = document.getElementById("settingsFab") as HTMLButtonElement;
+    const sheet = document.getElementById("settingsSheet") as HTMLElement;
+    fab.click();
+    expect(sheet.hasAttribute("hidden")).toBe(false);
+
+    document.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "Escape", bubbles: true }),
+    );
+    expect(sheet.hasAttribute("hidden")).toBe(true);
+  });
+
   test("contents of tab is hide by default", () => {
-    const contents = document.querySelector(".settingTab__content").children;
+    const contents = document.querySelector(".settingTab__content")!.children;
     for (const content of contents) {
       expect((content as HTMLElement).style.display).toBe("none");
     }
@@ -81,7 +132,7 @@ describe("settingTabComponent", () => {
       ".js-settingTabButton-hide",
     ) as HTMLButtonElement;
     hideButton.click();
-    const contents = document.querySelector(".settingTab__content").children;
+    const contents = document.querySelector(".settingTab__content")!.children;
     for (const content of contents) {
       expect((content as HTMLElement).style.display).toBe("none");
     }

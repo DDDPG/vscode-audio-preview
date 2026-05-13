@@ -130,6 +130,9 @@ export default class SpectralAnalyzerComponent extends Component {
     this._addEventlistener(containerEl, "mouseleave", () => {
       this._hoverActive = false;
       this._readoutEl.style.visibility = "hidden";
+      // Redraw once: stopping RAF cancels the next frame, which would otherwise
+      // leave the last crosshair painted on the canvas.
+      this._draw();
       this._syncRafToState();
     });
 
