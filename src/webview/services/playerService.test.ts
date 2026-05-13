@@ -1,8 +1,9 @@
 import { EventType } from "../events";
 import { createAudioContext, waitEventForAction } from "../../__mocks__/helper";
 import PlayerService from "./playerService";
-import { PlayerDefault } from "../../config";
+import { AnalyzeDefault, PlayerDefault } from "../../config";
 import PlayerSettingsService from "./playerSettingsService";
+import AnalyzeSettingsService from "./analyzeSettingsService";
 
 describe("playerService", () => {
   let playerService: PlayerService;
@@ -15,10 +16,15 @@ describe("playerService", () => {
       pd,
       audioBuffer,
     );
+    const analyzeSettingsService = AnalyzeSettingsService.fromDefaultSetting(
+      {} as AnalyzeDefault,
+      audioBuffer,
+    );
     playerService = new PlayerService(
       audioContext,
       audioBuffer,
       playerSettingService,
+      analyzeSettingsService,
     );
   });
 

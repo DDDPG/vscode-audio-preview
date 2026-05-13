@@ -53,6 +53,7 @@ describe("analyserComponent", () => {
       audioContext,
       audioBuffer,
       playerSettingsService,
+      analyzeSettingsService,
     );
     analyzerComponent = new AnalyzerComponent(
       "#analyzer",
@@ -130,6 +131,7 @@ describe("auto analyze", () => {
       audioContext,
       audioBuffer,
       playerSettingsService,
+      analyzeSettingsService,
     );
     const ac = new AnalyzerComponent(
       "#analyzer",
@@ -188,6 +190,7 @@ describe("auto analyze", () => {
       audioContext,
       audioBuffer,
       playerSettingsService,
+      analyzeSettingsService,
     );
     const ac = new AnalyzerComponent(
       "#analyzer",
@@ -253,6 +256,7 @@ describe("position of seek-bar should be updated when recieving update-seekbar e
       audioContext,
       audioBuffer,
       playerSettingsService,
+      analyzeSettingsService,
     );
     analyzeSettingsService.minTime = 2;
     analyzeSettingsService.maxTime = 6;

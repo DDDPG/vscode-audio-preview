@@ -2,6 +2,7 @@ import { EventType } from "../events";
 import { AnalyzeDefault } from "../../config";
 import { getRangeValues, getValueInEnum, getValueInRange } from "../../util";
 import Service from "../service";
+import type { LiveMonitoringMode } from "../utils/liveMonitoring";
 
 export enum WindowSizeIndex {
   W256 = 0,
@@ -568,6 +569,105 @@ export default class AnalyzeSettingsService extends Service {
     );
   }
 
+  private _showLevelMeter: boolean = false;
+  public get showLevelMeter(): boolean {
+    return this._showLevelMeter;
+  }
+  public set showLevelMeter(value: boolean) {
+    this._showLevelMeter = value === true;
+    this.dispatchEvent(
+      new CustomEvent(EventType.AS_UPDATE_SHOW_LEVEL_METER, {
+        detail: { value: this._showLevelMeter },
+      }),
+    );
+  }
+
+  private _showLiveAnalysis: boolean = false;
+  public get showLiveAnalysis(): boolean {
+    return this._showLiveAnalysis;
+  }
+  public set showLiveAnalysis(value: boolean) {
+    this._showLiveAnalysis = value === true;
+    this.dispatchEvent(
+      new CustomEvent(EventType.AS_UPDATE_SHOW_LIVE_ANALYSIS, {
+        detail: { value: this._showLiveAnalysis },
+      }),
+    );
+  }
+
+  private static readonly LIVE_FFT_SIZES = [512, 1024, 2048, 4096] as const;
+  private _liveAnalysisFftSize: 512 | 1024 | 2048 | 4096 = 2048;
+  public get liveAnalysisFftSize(): 512 | 1024 | 2048 | 4096 {
+    return this._liveAnalysisFftSize;
+  }
+  public set liveAnalysisFftSize(value: number) {
+    const valid = AnalyzeSettingsService.LIVE_FFT_SIZES.includes(
+      value as 512 | 1024 | 2048 | 4096,
+    );
+    this._liveAnalysisFftSize = valid
+      ? (value as 512 | 1024 | 2048 | 4096)
+      : 2048;
+    this.dispatchEvent(
+      new CustomEvent(EventType.AS_UPDATE_LIVE_ANALYSIS_FFT_SIZE, {
+        detail: { value: this._liveAnalysisFftSize },
+      }),
+    );
+  }
+
+  private static readonly LIVE_TILT_VALUES = [0, 1.5, 3, 4.5, 6] as const;
+
+  private _liveVisualSmoothingPct: number = 35;
+  public get liveVisualSmoothingPct(): number {
+    return this._liveVisualSmoothingPct;
+  }
+  public set liveVisualSmoothingPct(value: number) {
+    this._liveVisualSmoothingPct = getValueInRange(
+      Math.round(Number(value)),
+      0,
+      100,
+      35,
+    );
+    this.dispatchEvent(
+      new CustomEvent(EventType.AS_UPDATE_LIVE_VISUAL_SMOOTHING, {
+        detail: { value: this._liveVisualSmoothingPct },
+      }),
+    );
+  }
+
+  private _liveSpectrumTiltDbPerOct: 0 | 1.5 | 3 | 4.5 | 6 = 0;
+  public get liveSpectrumTiltDbPerOct(): 0 | 1.5 | 3 | 4.5 | 6 {
+    return this._liveSpectrumTiltDbPerOct;
+  }
+  public set liveSpectrumTiltDbPerOct(value: number) {
+    const v = Number(value);
+    const ok = (AnalyzeSettingsService.LIVE_TILT_VALUES as readonly number[]).includes(
+      v,
+    );
+    this._liveSpectrumTiltDbPerOct = ok
+      ? (v as 0 | 1.5 | 3 | 4.5 | 6)
+      : 0;
+    this.dispatchEvent(
+      new CustomEvent(EventType.AS_UPDATE_LIVE_SPECTRUM_TILT, {
+        detail: { value: this._liveSpectrumTiltDbPerOct },
+      }),
+    );
+  }
+
+  private _liveMonitoringMode: LiveMonitoringMode = "lr";
+  public get liveMonitoringMode(): LiveMonitoringMode {
+    return this._liveMonitoringMode;
+  }
+  public set liveMonitoringMode(value: LiveMonitoringMode) {
+    const v = String(value).toLowerCase();
+    const allowed = ["lr", "l", "r", "m", "s"];
+    this._liveMonitoringMode = (allowed.includes(v) ? v : "lr") as LiveMonitoringMode;
+    this.dispatchEvent(
+      new CustomEvent(EventType.AS_UPDATE_LIVE_MONITORING_MODE, {
+        detail: { value: this._liveMonitoringMode },
+      }),
+    );
+  }
+
   private _melFilterNum: number;
   public get melFilterNum() {
     return this._melFilterNum;
@@ -731,6 +831,24 @@ export default class AnalyzeSettingsService extends Service {
 
     setting.fftWindowAuto = defaultSetting.fftWindowAuto === true;
 
+    setting.showLevelMeter = defaultSetting.showLevelMeter === true;
+    setting.showLiveAnalysis = defaultSetting.showLiveAnalysis === true;
+    if (defaultSetting.liveAnalysisFftSize !== undefined) {
+      setting.liveAnalysisFftSize = defaultSetting.liveAnalysisFftSize;
+    }
+
+    if (defaultSetting.liveAnalysisVisualSmoothingPct !== undefined) {
+      setting.liveVisualSmoothingPct =
+        defaultSetting.liveAnalysisVisualSmoothingPct;
+    }
+    if (defaultSetting.liveSpectrumTiltDbPerOct !== undefined) {
+      setting.liveSpectrumTiltDbPerOct =
+        defaultSetting.liveSpectrumTiltDbPerOct;
+    }
+    if (defaultSetting.liveMonitoringMode !== undefined) {
+      setting.liveMonitoringMode = defaultSetting.liveMonitoringMode;
+    }
+
     return setting;
   }
 
@@ -853,6 +971,12 @@ export default class AnalyzeSettingsService extends Service {
       windowType: this.windowType,
       highResolutionSpectrogram: this.highResolutionSpectrogram,
       fftBackend: this.fftBackend,
+      showLevelMeter: this.showLevelMeter,
+      showLiveAnalysis: this.showLiveAnalysis,
+      liveAnalysisFftSize: this.liveAnalysisFftSize,
+      liveAnalysisVisualSmoothingPct: this.liveVisualSmoothingPct,
+      liveSpectrumTiltDbPerOct: this.liveSpectrumTiltDbPerOct,
+      liveMonitoringMode: this.liveMonitoringMode,
     };
   }
 

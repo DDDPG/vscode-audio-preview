@@ -92,6 +92,76 @@ export default class FigureInteractionComponent extends Component {
       },
     );
 
+    const readoutEl = document.createElement("div");
+    readoutEl.className = onWaveformCanvas
+      ? "figureHoverReadout figureHoverReadout--waveform"
+      : "figureHoverReadout figureHoverReadout--spectrogram";
+    readoutEl.setAttribute("aria-live", "polite");
+    readoutEl.style.visibility = "hidden";
+    componentRoot.appendChild(readoutEl);
+
+    let crossV: HTMLDivElement | null = null;
+    let crossH: HTMLDivElement | null = null;
+    if (!onWaveformCanvas) {
+      crossV = document.createElement("div");
+      crossV.className = "figureCursorCrosshair figureCursorCrosshair--v";
+      crossV.style.display = "none";
+      crossH = document.createElement("div");
+      crossH.className = "figureCursorCrosshair figureCursorCrosshair--h";
+      crossH.style.display = "none";
+      componentRoot.appendChild(crossV);
+      componentRoot.appendChild(crossH);
+    }
+
+    const fmtLin = (v: number) =>
+      Number.isFinite(v) ? v.toFixed(5) : "—";
+    const fmtRmsWindow = (sec: number) => {
+      if (!Number.isFinite(sec) || sec <= 0) {
+        return "";
+      }
+      return sec >= 1
+        ? `${sec.toFixed(3)} s`
+        : `${(sec * 1000).toFixed(2)} ms`;
+    };
+    const fmtHz = (hz: number) => {
+      if (!Number.isFinite(hz)) {
+        return "—";
+      }
+      if (Math.abs(hz) >= 1000) {
+        return `${(hz / 1000).toFixed(3)} kHz`;
+      }
+      return `${hz.toFixed(1)} Hz`;
+    };
+
+    const applyLocalHoverUi = (
+      d: CursorReadoutPayload,
+      xn: number,
+      yn: number,
+    ) => {
+      if (d.kind === "clear") {
+        readoutEl.style.visibility = "hidden";
+        if (crossV && crossH) {
+          crossV.style.display = "none";
+          crossH.style.display = "none";
+        }
+        return;
+      }
+      readoutEl.style.visibility = "visible";
+      const w = fmtRmsWindow(d.rmsWindowDurationSec);
+      const winHtml = w ? `<br><span class="figureHoverReadout__meta">win ${w}</span>` : "";
+      if (d.kind === "waveform") {
+        readoutEl.innerHTML = `Ch ${channelIndex + 1}<br>RMS ${fmtLin(d.rms)}<br>Peak ${fmtLin(d.peak)}${winHtml}`;
+      } else {
+        readoutEl.innerHTML = `Ch ${channelIndex + 1}<br>RMS ${fmtLin(d.rms)}<br>Peak ${fmtLin(d.peak)}<br>${fmtHz(d.frequencyHz)}${winHtml}`;
+      }
+      if (crossV && crossH) {
+        crossV.style.display = "block";
+        crossH.style.display = "block";
+        crossV.style.left = `${xn}px`;
+        crossH.style.top = `${yn}px`;
+      }
+    };
+
     const userInputDiv = document.createElement("div");
     userInputDiv.className = "userInputDiv";
     componentRoot.appendChild(userInputDiv);
@@ -127,18 +197,15 @@ export default class FigureInteractionComponent extends Component {
       const chData = audioBuffer.getChannelData(channelIndex);
       const { rms, peak } = AnalyzeService.windowRmsPeak(chData, center, win);
       const rmsWindowDurationSec = win / sr;
+      let detail: CursorReadoutPayload;
       if (onWaveformCanvas) {
-        window.dispatchEvent(
-          new CustomEvent<CursorReadoutPayload>(EventType.CURSOR_READOUT, {
-            detail: {
-              kind: "waveform",
-              channelIndex,
-              rms,
-              peak,
-              rmsWindowDurationSec,
-            },
-          }),
-        );
+        detail = {
+          kind: "waveform",
+          channelIndex,
+          rms,
+          peak,
+          rmsWindowDurationSec,
+        };
       } else {
         const hz = AnalyzeService.spectrogramCursorYToHz(
           yn,
@@ -147,19 +214,21 @@ export default class FigureInteractionComponent extends Component {
           props.minFrequency,
           props.maxFrequency,
         );
-        window.dispatchEvent(
-          new CustomEvent<CursorReadoutPayload>(EventType.CURSOR_READOUT, {
-            detail: {
-              kind: "spectrogram",
-              channelIndex,
-              rms,
-              peak,
-              frequencyHz: hz,
-              rmsWindowDurationSec,
-            },
-          }),
-        );
+        detail = {
+          kind: "spectrogram",
+          channelIndex,
+          rms,
+          peak,
+          frequencyHz: hz,
+          rmsWindowDurationSec,
+        };
       }
+      applyLocalHoverUi(detail, xn, yn);
+      window.dispatchEvent(
+        new CustomEvent<CursorReadoutPayload>(EventType.CURSOR_READOUT, {
+          detail,
+        }),
+      );
     };
     const scheduleCursorReadout = (clientX: number, clientY: number) => {
       lastClientX = clientX;
@@ -180,6 +249,7 @@ export default class FigureInteractionComponent extends Component {
         cancelAnimationFrame(cursorReadoutRaf);
         cursorReadoutRaf = 0;
       }
+      applyLocalHoverUi({ kind: "clear" }, 0, 0);
       window.dispatchEvent(
         new CustomEvent<CursorReadoutPayload>(EventType.CURSOR_READOUT, {
           detail: { kind: "clear" },

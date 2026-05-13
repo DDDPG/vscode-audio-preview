@@ -597,4 +597,184 @@ describe("analyzeSettingsService", () => {
     expect(as.minFrequency).toBe(0);
     expect(as.maxFrequency).toBeCloseTo(audioBuffer.sampleRate / 2);
   });
+
+  // showLevelMeter
+  test("showLevelMeter should be false by default", () => {
+    const as = AnalyzeSettingsService.fromDefaultSetting(
+      defaultSettings,
+      audioBuffer,
+    );
+    expect(as.showLevelMeter).toBe(false);
+  });
+  test("showLevelMeter respects default setting (true)", () => {
+    defaultSettings.showLevelMeter = true;
+    const as = AnalyzeSettingsService.fromDefaultSetting(
+      defaultSettings,
+      audioBuffer,
+    );
+    expect(as.showLevelMeter).toBe(true);
+  });
+  test("showLevelMeter dispatches event on change", async () => {
+    const as = AnalyzeSettingsService.fromDefaultSetting(
+      defaultSettings,
+      audioBuffer,
+    );
+    const detail = await waitEventForAction(
+      () => { as.showLevelMeter = true; },
+      as,
+      EventType.AS_UPDATE_SHOW_LEVEL_METER,
+    );
+    expect(detail.value).toBe(true);
+  });
+  test("showLevelMeter is persisted via toCachedDefaults", () => {
+    const as = AnalyzeSettingsService.fromDefaultSetting(
+      defaultSettings,
+      audioBuffer,
+    );
+    as.showLevelMeter = true;
+    expect(as.toCachedDefaults().showLevelMeter).toBe(true);
+  });
+
+  // showLiveAnalysis
+  test("showLiveAnalysis should be false by default", () => {
+    const as = AnalyzeSettingsService.fromDefaultSetting(
+      defaultSettings,
+      audioBuffer,
+    );
+    expect(as.showLiveAnalysis).toBe(false);
+  });
+  test("showLiveAnalysis respects default setting (true)", () => {
+    defaultSettings.showLiveAnalysis = true;
+    const as = AnalyzeSettingsService.fromDefaultSetting(
+      defaultSettings,
+      audioBuffer,
+    );
+    expect(as.showLiveAnalysis).toBe(true);
+  });
+  test("showLiveAnalysis dispatches event on change", async () => {
+    const as = AnalyzeSettingsService.fromDefaultSetting(
+      defaultSettings,
+      audioBuffer,
+    );
+    const detail = await waitEventForAction(
+      () => { as.showLiveAnalysis = true; },
+      as,
+      EventType.AS_UPDATE_SHOW_LIVE_ANALYSIS,
+    );
+    expect(detail.value).toBe(true);
+  });
+
+  // liveAnalysisFftSize
+  test("liveAnalysisFftSize should be 2048 by default", () => {
+    const as = AnalyzeSettingsService.fromDefaultSetting(
+      defaultSettings,
+      audioBuffer,
+    );
+    expect(as.liveAnalysisFftSize).toBe(2048);
+  });
+  test("liveAnalysisFftSize respects valid default setting", () => {
+    defaultSettings.liveAnalysisFftSize = 1024;
+    const as = AnalyzeSettingsService.fromDefaultSetting(
+      defaultSettings,
+      audioBuffer,
+    );
+    expect(as.liveAnalysisFftSize).toBe(1024);
+  });
+  test("liveAnalysisFftSize falls back to 2048 for invalid value", () => {
+    const as = AnalyzeSettingsService.fromDefaultSetting(
+      defaultSettings,
+      audioBuffer,
+    );
+    as.liveAnalysisFftSize = 999 as never;
+    expect(as.liveAnalysisFftSize).toBe(2048);
+  });
+  test("liveAnalysisFftSize dispatches event on change", async () => {
+    const as = AnalyzeSettingsService.fromDefaultSetting(
+      defaultSettings,
+      audioBuffer,
+    );
+    const detail = await waitEventForAction(
+      () => { as.liveAnalysisFftSize = 512; },
+      as,
+      EventType.AS_UPDATE_LIVE_ANALYSIS_FFT_SIZE,
+    );
+    expect(detail.value).toBe(512);
+  });
+  test("liveAnalysisFftSize is persisted via toCachedDefaults", () => {
+    const as = AnalyzeSettingsService.fromDefaultSetting(
+      defaultSettings,
+      audioBuffer,
+    );
+    as.liveAnalysisFftSize = 4096;
+    expect(as.toCachedDefaults().liveAnalysisFftSize).toBe(4096);
+  });
+
+  test("liveVisualSmoothingPct should be 35 by default", () => {
+    const as = AnalyzeSettingsService.fromDefaultSetting(
+      defaultSettings,
+      audioBuffer,
+    );
+    expect(as.liveVisualSmoothingPct).toBe(35);
+  });
+
+  test("liveVisualSmoothingPct respects default from config", () => {
+    defaultSettings.liveAnalysisVisualSmoothingPct = 80;
+    const as = AnalyzeSettingsService.fromDefaultSetting(
+      defaultSettings,
+      audioBuffer,
+    );
+    expect(as.liveVisualSmoothingPct).toBe(80);
+  });
+
+  test("liveVisualSmoothingPct is persisted via toCachedDefaults", () => {
+    const as = AnalyzeSettingsService.fromDefaultSetting(
+      defaultSettings,
+      audioBuffer,
+    );
+    as.liveVisualSmoothingPct = 0;
+    expect(as.toCachedDefaults().liveAnalysisVisualSmoothingPct).toBe(0);
+  });
+
+  test("liveSpectrumTiltDbPerOct should be 0 by default", () => {
+    const as = AnalyzeSettingsService.fromDefaultSetting(
+      defaultSettings,
+      audioBuffer,
+    );
+    expect(as.liveSpectrumTiltDbPerOct).toBe(0);
+  });
+
+  test("liveSpectrumTiltDbPerOct respects default from config", () => {
+    defaultSettings.liveSpectrumTiltDbPerOct = 6;
+    const as = AnalyzeSettingsService.fromDefaultSetting(
+      defaultSettings,
+      audioBuffer,
+    );
+    expect(as.liveSpectrumTiltDbPerOct).toBe(6);
+  });
+
+  test("liveSpectrumTiltDbPerOct invalid value falls back to 0", () => {
+    const as = AnalyzeSettingsService.fromDefaultSetting(
+      defaultSettings,
+      audioBuffer,
+    );
+    as.liveSpectrumTiltDbPerOct = 2.5 as never;
+    expect(as.liveSpectrumTiltDbPerOct).toBe(0);
+  });
+
+  test("liveMonitoringMode should be lr by default", () => {
+    const as = AnalyzeSettingsService.fromDefaultSetting(
+      defaultSettings,
+      audioBuffer,
+    );
+    expect(as.liveMonitoringMode).toBe("lr");
+  });
+
+  test("liveMonitoringMode is persisted via toCachedDefaults", () => {
+    const as = AnalyzeSettingsService.fromDefaultSetting(
+      defaultSettings,
+      audioBuffer,
+    );
+    as.liveMonitoringMode = "m";
+    expect(as.toCachedDefaults().liveMonitoringMode).toBe("m");
+  });
 });

@@ -178,4 +178,31 @@ export interface AnalyzeDefault {
    * Controlled by WavPreview.cacheAnalyzeUi; not applied by the webview directly.
    */
   cacheAnalyzeUi?: boolean;
+
+  /** Show the real-time stereo level meter (right column). default: false */
+  showLevelMeter?: boolean;
+
+  /** Show the live analysis column (goniometer + spectrum analyzer). default: false */
+  showLiveAnalysis?: boolean;
+
+  /** FFT size for live analysers. 512 | 1024 | 2048 | 4096. default: 2048 */
+  liveAnalysisFftSize?: 512 | 1024 | 2048 | 4096;
+
+  /**
+   * Live goniometer / spectrum visual smoothing (0 = jumpy, 100 = very slow).
+   * Maps to per-frame exponential decay. default: 35
+   */
+  liveAnalysisVisualSmoothingPct?: number;
+
+  /**
+   * Spectrum analyzer display tilt (rolloff), dB per octave, applied vs 1 kHz anchor.
+   * 0 = off; common values 1.5, 3, 4.5, 6.
+   */
+  liveSpectrumTiltDbPerOct?: 0 | 1.5 | 3 | 4.5 | 6;
+
+  /**
+   * Live monitoring matrix: stereo path for headphones + live meters.
+   * "lr" default; "l"/"r"/"m"/"s" = solo left, right, mid, side (linear).
+   */
+  liveMonitoringMode?: "lr" | "l" | "r" | "m" | "s";
 }

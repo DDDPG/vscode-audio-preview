@@ -91,8 +91,8 @@ export default class AnalyzeSettingsComponent extends Component {
           <input class="analyzeSetting__input js-analyzeSetting-maxFrequency" type="number" step="1000">Hz
       </div>
       <div>
-          <div>
-              spectrogram amplitude range:
+      <div>
+          spectrogram amplitude range:
               <input class="analyzeSetting__input js-analyzeSetting-spectrogramAmplitudeLow" type="number" step="10">dB ~
               <input class="analyzeSetting__input js-analyzeSetting-spectrogramAmplitudeHigh" type="number" step="10">dB
           </div>
@@ -101,6 +101,38 @@ export default class AnalyzeSettingsComponent extends Component {
               <canvas class="analyzeSetting__canvas js-analyzeSetting-spectrogramColorAxis" width="800px" height="40px"></canvas>
               <canvas class="analyzeSetting__canvas js-analyzeSetting-spectrogramColor" width="100px" height="5px"></canvas>
           </div>
+      </div>
+
+      <h3>Live Meters</h3>
+      <div>
+          <label><input class="js-analyzeSetting-showLevelMeter" type="checkbox"> Show Level Meter</label>
+      </div>
+      <div>
+          <label><input class="js-analyzeSetting-showLiveAnalysis" type="checkbox"> Show Live Analysis (Goniometer + Spectrum)</label>
+      </div>
+      <div>
+          Live FFT Size:
+          <select class="analyzeSetting__select js-analyzeSetting-liveAnalysisFftSize">
+              <option value="512">512</option>
+              <option value="1024">1024</option>
+              <option value="2048">2048</option>
+              <option value="4096">4096</option>
+          </select>
+      </div>
+      <div>
+          Live visual smoothing (goniometer / spectrum / RMS ballistics):
+          <input class="analyzeSetting__input js-analyzeSetting-liveVisualSmoothingPct" type="range" min="0" max="100" step="1">
+          <span class="js-analyzeSetting-liveVisualSmoothingPctLabel"></span>
+      </div>
+      <div>
+          Live spectrum tilt (dB/oct @ 1 kHz, roll-off toward HF):
+          <select class="analyzeSetting__select js-analyzeSetting-liveSpectrumTilt">
+              <option value="0">Off</option>
+              <option value="1.5">Roll 1.5</option>
+              <option value="3">Roll 3</option>
+              <option value="4.5">Roll 4.5</option>
+              <option value="6">Roll 6</option>
+          </select>
       </div>
     </div>
     `;
@@ -377,6 +409,7 @@ export default class AnalyzeSettingsComponent extends Component {
     );
 
     // init spectrogram amplitude low input
+    // (live meters controls appended after spectrogram block, see bottom of method)
     const spectrogramAmplitudeLowInput = <HTMLInputElement>(
       this._componentRoot.querySelector(
         ".js-analyzeSetting-spectrogramAmplitudeLow",
@@ -412,6 +445,100 @@ export default class AnalyzeSettingsComponent extends Component {
       (e: CustomEventInit) => {
         spectrogramAmplitudeHighInput.value = `${e.detail.value}`;
         this.updateColorBar(settings.toProps());
+      },
+    );
+
+    // init Show Level Meter checkbox
+    const showLevelMeterInput = <HTMLInputElement>(
+      this._componentRoot.querySelector(".js-analyzeSetting-showLevelMeter")
+    );
+    showLevelMeterInput.checked = settings.showLevelMeter;
+    this._addEventlistener(showLevelMeterInput, EventType.CHANGE, () => {
+      settings.showLevelMeter = showLevelMeterInput.checked;
+    });
+    this._addEventlistener(
+      settings,
+      EventType.AS_UPDATE_SHOW_LEVEL_METER,
+      (e: CustomEventInit) => {
+        showLevelMeterInput.checked = e.detail.value;
+      },
+    );
+
+    // init Show Live Analysis checkbox
+    const showLiveAnalysisInput = <HTMLInputElement>(
+      this._componentRoot.querySelector(".js-analyzeSetting-showLiveAnalysis")
+    );
+    showLiveAnalysisInput.checked = settings.showLiveAnalysis;
+    this._addEventlistener(showLiveAnalysisInput, EventType.CHANGE, () => {
+      settings.showLiveAnalysis = showLiveAnalysisInput.checked;
+    });
+    this._addEventlistener(
+      settings,
+      EventType.AS_UPDATE_SHOW_LIVE_ANALYSIS,
+      (e: CustomEventInit) => {
+        showLiveAnalysisInput.checked = e.detail.value;
+      },
+    );
+
+    // init Live FFT Size select
+    const liveAnalysisFftSizeSelect = <HTMLSelectElement>(
+      this._componentRoot.querySelector(".js-analyzeSetting-liveAnalysisFftSize")
+    );
+    liveAnalysisFftSizeSelect.value = String(settings.liveAnalysisFftSize);
+    this._addEventlistener(liveAnalysisFftSizeSelect, EventType.CHANGE, () => {
+      settings.liveAnalysisFftSize = Number(liveAnalysisFftSizeSelect.value) as 512 | 1024 | 2048 | 4096;
+    });
+    this._addEventlistener(
+      settings,
+      EventType.AS_UPDATE_LIVE_ANALYSIS_FFT_SIZE,
+      (e: CustomEventInit) => {
+        liveAnalysisFftSizeSelect.value = String(e.detail.value);
+      },
+    );
+
+    const liveVisualSmoothingPctInput = <HTMLInputElement>(
+      this._componentRoot.querySelector(
+        ".js-analyzeSetting-liveVisualSmoothingPct",
+      )
+    );
+    const liveVisualSmoothingPctLabel = <HTMLElement>(
+      this._componentRoot.querySelector(
+        ".js-analyzeSetting-liveVisualSmoothingPctLabel",
+      )
+    );
+    const syncSmoothingLabel = () => {
+      liveVisualSmoothingPctLabel.textContent = `${settings.liveVisualSmoothingPct}`;
+    };
+    liveVisualSmoothingPctInput.value = String(settings.liveVisualSmoothingPct);
+    syncSmoothingLabel();
+    this._addEventlistener(liveVisualSmoothingPctInput, EventType.INPUT, () => {
+      settings.liveVisualSmoothingPct = Number(liveVisualSmoothingPctInput.value);
+      syncSmoothingLabel();
+    });
+    this._addEventlistener(
+      settings,
+      EventType.AS_UPDATE_LIVE_VISUAL_SMOOTHING,
+      (e: CustomEventInit<{ value: number }>) => {
+        const v = e.detail.value;
+        liveVisualSmoothingPctInput.value = String(v);
+        liveVisualSmoothingPctLabel.textContent = String(v);
+      },
+    );
+
+    const liveSpectrumTiltSelect = <HTMLSelectElement>(
+      this._componentRoot.querySelector(".js-analyzeSetting-liveSpectrumTilt")
+    );
+    liveSpectrumTiltSelect.value = String(settings.liveSpectrumTiltDbPerOct);
+    this._addEventlistener(liveSpectrumTiltSelect, EventType.CHANGE, () => {
+      settings.liveSpectrumTiltDbPerOct = Number(
+        liveSpectrumTiltSelect.value,
+      ) as 0 | 1.5 | 3 | 4.5 | 6;
+    });
+    this._addEventlistener(
+      settings,
+      EventType.AS_UPDATE_LIVE_SPECTRUM_TILT,
+      (e: CustomEventInit) => {
+        liveSpectrumTiltSelect.value = String(e.detail.value);
       },
     );
   }

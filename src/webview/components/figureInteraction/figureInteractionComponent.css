@@ -20,3 +20,57 @@
 
   border-right: 3px solid var(--vscode-button-background);
 }
+
+/* In-figure cursor readout (waveform / spectrogram); avoids axis tick labels */
+.figureHoverReadout {
+  position: absolute;
+  z-index: 8;
+  pointer-events: none;
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 11px;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.95);
+  text-shadow:
+    0 0 4px rgba(0, 0, 0, 0.95),
+    0 1px 2px rgba(0, 0, 0, 0.9);
+  white-space: nowrap;
+  max-width: min(320px, calc(100% - 12px));
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.figureHoverReadout--waveform {
+  left: 56px;
+  top: 6px;
+}
+
+.figureHoverReadout--spectrogram {
+  left: 72px;
+  top: 26px;
+}
+
+.figureHoverReadout__meta {
+  opacity: 0.85;
+  font-size: 10px;
+}
+
+.figureCursorCrosshair {
+  position: absolute;
+  z-index: 7;
+  pointer-events: none;
+  background: rgba(255, 255, 255, 0.82);
+}
+
+.figureCursorCrosshair--v {
+  top: 0;
+  width: 1px;
+  height: 100%;
+  transform: translateX(-0.5px);
+}
+
+.figureCursorCrosshair--h {
+  left: 0;
+  height: 1px;
+  width: 100%;
+  transform: translateY(-0.5px);
+}

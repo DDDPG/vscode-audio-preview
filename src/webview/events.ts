@@ -43,6 +43,18 @@ export class EventType {
   public static readonly AS_UPDATE_FFT_BACKEND = "as-update-fft-backend";
   public static readonly AS_UPDATE_HIGH_RESOLUTION_SPECTROGRAM =
     "as-update-high-resolution-spectrogram";
+  public static readonly AS_UPDATE_SHOW_LEVEL_METER =
+    "as-update-show-level-meter";
+  public static readonly AS_UPDATE_SHOW_LIVE_ANALYSIS =
+    "as-update-show-live-analysis";
+  public static readonly AS_UPDATE_LIVE_ANALYSIS_FFT_SIZE =
+    "as-update-live-analysis-fft-size";
+  public static readonly AS_UPDATE_LIVE_VISUAL_SMOOTHING =
+    "as-update-live-visual-smoothing";
+  public static readonly AS_UPDATE_LIVE_SPECTRUM_TILT =
+    "as-update-live-spectrum-tilt";
+  public static readonly AS_UPDATE_LIVE_MONITORING_MODE =
+    "as-update-live-monitoring-mode";
   public static readonly UPDATE_PLAYBACK_POSITION = "update-playback-position";
   // other
   public static readonly CLICK = "click";

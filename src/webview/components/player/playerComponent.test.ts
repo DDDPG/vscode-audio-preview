@@ -5,6 +5,8 @@ import {
 } from "../../../__mocks__/helper";
 import PlayerService from "../../services/playerService";
 import PlayerSettingsService from "../../services/playerSettingsService";
+import AnalyzeSettingsService from "../../services/analyzeSettingsService";
+import { AnalyzeDefault } from "../../../config";
 import PlayerComponent from "./playerComponent";
 
 describe("playerComponent", () => {
@@ -31,10 +33,15 @@ describe("playerComponent", () => {
       pd,
       audioBuffer,
     );
+    const analyzeSettingsService = AnalyzeSettingsService.fromDefaultSetting(
+      {} as AnalyzeDefault,
+      audioBuffer,
+    );
     playerService = new PlayerService(
       audioContext,
       audioBuffer,
       playerSettingService,
+      analyzeSettingsService,
     );
     playerComponent = new PlayerComponent(
       "#player",
@@ -130,6 +137,7 @@ describe("playerComponent", () => {
       audioContext,
       audioBuffer,
       playerSettingService,
+      AnalyzeSettingsService.fromDefaultSetting({} as AnalyzeDefault, audioBuffer),
     );
     const playerComponent = new PlayerComponent(
       "#player2",
@@ -216,6 +224,7 @@ describe("playerComponent", () => {
       audioContext,
       audioBuffer,
       playerSettingService,
+      AnalyzeSettingsService.fromDefaultSetting({} as AnalyzeDefault, audioBuffer),
     );
     const playerComponent = new PlayerComponent(
       "#player2",

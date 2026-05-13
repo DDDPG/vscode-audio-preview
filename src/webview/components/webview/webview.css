@@ -2,6 +2,8 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0.5em;
+  /* allow root to stretch to full viewport height so the live columns fill */
+  min-height: 0;
 }
 
 #settingTab {
@@ -9,7 +11,22 @@
   grid-column-end: 3;
 }
 
-#analyzer {
+#liveMonitoringBar {
   grid-column-start: 1;
   grid-column-end: 3;
+  padding: 0 2px;
+  min-height: 0;
+}
+
+/* #mainVisualizer replaces #analyzer as the full-width visualization row */
+#mainVisualizer {
+  grid-column-start: 1;
+  grid-column-end: 3;
+  /* inner 3-col grid is defined in liveMeters.css via #mainVisualizer rule */
+}
+
+/* Keep backward compat: #analyzer lives inside #mainVisualizer as the 1fr column */
+#analyzer {
+  min-width: 0;
+  overflow: hidden;
 }

@@ -40,7 +40,7 @@ Play audio, inspect metadata, and view **waveform** and **spectrogram** inside V
 
 - Drag on any plot to select a time/frequency/amplitude range and re-analyze that region; hold **Ctrl** or **Shift** to constrain the axis.
 - Right-click to reset the visible range (with Ctrl / Shift variants).
-- Waveform / spectrogram hover emits `CURSOR_READOUT` events that drive **RMS, peak, and frequency** readouts in the info table.
+- Waveform / spectrogram hover emits `CURSOR_READOUT` on `window` (for tests/extensions) and shows **RMS, peak, and frequency** in a white overlay on the **figure itself** (top-left, clear of axis ticks). Spectrogram figures also get a **white crosshair** at the cursor.
 
 ### 6. Extension UX
 
@@ -64,7 +64,7 @@ The upstream webview shipped a **single FFmpeg-based WASM decoder** that had to 
 | **Spectrogram redraw (CPU)** | Canvas2D `fillRect` + color string per pixel            | **WebGL2** texture pack + 1 draw call (`spectrogramRenderer.ts`)                                                                                | **5–7× faster** CPU-side across 10 s / 60 s / 300 s audio (e.g. 40.9 ms → 6.0 ms for 300 s)                 |
 | **STFT / spectrogram math**  | Ooura FFT (JS), single Hann window                      | Ooura (default, faster) **or** Essentia.js WASM (multi-window types) — user-selectable via *FFT backend* setting                                | Ooura is the faster path; Essentia adds Hamming / Blackman–Harris / Triangular windows and LUFS calculation |
 | **Host ↔ webview file I/O**  | Chunked `postMessage` transfer                          | Same chunked transfer; perceived readiness improves from faster decode + phased UI init                                                         | —                                                                                                           |
-| **Analysis UX**              | Good baseline                                           | **dB range**, **log axis fixes**, optional **high-res STFT**, **cursor RMS/peak/freq** readouts, **analyze UI cache**, **FFT backend selector** | —                                                                                                           |
+| **Analysis UX**              | Good baseline                                           | **dB range**, **log axis fixes**, optional **high-res STFT**, **cursor RMS/peak/freq** on-figure readouts + live-spectrum crosshair, **analyze UI cache**, **FFT backend selector** | —                                                                                                           |
 
 
 **Common operations in plain terms**
@@ -83,7 +83,7 @@ how-to-use
 - **Drag** on a plot to select a range and re-run analysis on that range. Hold **Ctrl** for time-focused selection, **Shift** for value-focused selection.
 - **Right-click** to reset the visible range (with Ctrl / Shift variants for time-only or value-only reset).
 - Use the in-editor **Analyze** tab for precise numeric settings.
-- The **info table** can show cursor RMS / peak / frequency while you move over the waveform or spectrogram.
+- The **live spectrum** panel shows frequency / graticule dB / peak & RMS at the cursor in an overlay, with a **white crosshair** to the plot edges.
 
 To open audio with this editor by default, set `workbench.editorAssociations` for your extensions (e.g. `*.wav`, `*.mp3`) to `wavPreview.audioPreview`.
 

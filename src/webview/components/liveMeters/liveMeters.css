@@ -1,0 +1,361 @@
+/* ── CSS custom properties for live meter color theming ───────────────────── */
+:root {
+  --meter-bg:              #1a1a1a;
+  --meter-green:           #4caf50;
+  --meter-yellow:          #ffeb3b;
+  --meter-red:             #f44336;
+  --meter-rms-alpha:       0.75;
+  --meter-peak-hold-color: #ffffff;
+  --meter-clip-color:      #f44336;
+  --meter-clip-clear-color:#333333;
+  --meter-scale-color:     rgba(255,255,255,0.45);
+  --meter-col-width:       0px;
+
+  --gonioMeter-bg:             #111111;
+  --gonioMeter-grid:           rgba(255,255,255,0.12);
+  --gonioMeter-axis:           rgba(255,255,255,0.3);
+  --gonioMeter-point:          #00e5ff;
+  --gonioMeter-corr-negative:  #f44336;
+  --gonioMeter-corr-positive:  #4caf50;
+
+  --spectrum-bg:           #0f0f0f;
+  --spectrum-grid:         rgba(255,255,255,0.1);
+  --spectrum-fill-top:     rgba(0,180,216,0.85);
+  --spectrum-fill-bottom:  rgba(0,100,160,0.2);
+  --spectrum-line:         #00b4d8;
+
+  --live-col-width:        0px;
+  --live-split-ratio:      0.5;
+}
+
+/* ── Main visualizer grid wrapper ─────────────────────────────────────────── */
+#mainVisualizer {
+  display: grid;
+  /* minmax(0,1fr) prevents the analyzer column from forcing min-content width
+     and collapsing sibling tracks to zero when live columns are wide. */
+  grid-template-columns:
+    minmax(0, 1fr)
+    minmax(0, var(--live-col-width, 0px))
+    minmax(0, var(--meter-col-width, 0px));
+  width: 100%;
+  min-height: 0;
+  flex: 1 1 0;
+  overflow: hidden;
+}
+
+/* ── Right column: level meter ────────────────────────────────────────────── */
+#liveMetersRight {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  width: var(--meter-col-width);
+  min-width: 0;
+  background: var(--meter-bg);
+}
+
+/* ── Middle column: goniometer + spectrum ─────────────────────────────────── */
+#liveMetersMiddle {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+  position: relative;
+  background: var(--vscode-editor-background, #1e1e1e);
+}
+
+/* ── Level meter component ────────────────────────────────────────────────── */
+.levelMeterComponent {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  height: 100%;
+  padding: 2px;
+  gap: 2px;
+  box-sizing: border-box;
+}
+
+.levelMeter__channel {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 0;
+  min-height: 0;
+}
+
+.levelMeter__readoutOverlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 3px;
+  padding: 2px 1px;
+  text-align: center;
+  pointer-events: none;
+  z-index: 2;
+  font-size: 8px;
+  line-height: 1.2;
+  font-family: var(--vscode-editor-font-family, monospace);
+  color: rgba(255, 255, 255, 0.95);
+  text-shadow:
+    0 0 3px rgba(0, 0, 0, 0.9),
+    0 1px 2px rgba(0, 0, 0, 0.85);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.levelMeter__readoutCh {
+  font-weight: 700;
+  font-size: 9px;
+  letter-spacing: 0.02em;
+}
+
+.levelMeter__readoutNums {
+  font-variant-numeric: tabular-nums;
+  opacity: 0.98;
+}
+
+.levelMeter__scaleCol {
+  position: relative;
+  width: 22px;
+  flex: 0 0 22px;
+  min-height: 0;
+  border-left: 1px solid rgba(255,255,255,0.12);
+}
+
+.levelMeter__tick {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.levelMeter__tick span {
+  position: absolute;
+  right: 1px;
+  font-size: 8px;
+  font-family: var(--vscode-editor-font-family, monospace);
+  color: var(--meter-scale-color);
+  transform: translateY(-50%);
+}
+
+/* Wrapper gives the canvas a definite flex box to measure; canvas fills it. */
+.levelMeter__canvasWrap {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  align-self: stretch;
+  width: 100%;
+}
+
+.levelMeter__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.levelMeter__clipLed {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--meter-clip-clear-color);
+  margin: 0 auto 2px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.levelMeter__clipLed.clipped {
+  background: var(--meter-clip-color);
+}
+
+/* ── Live analysis component ──────────────────────────────────────────────── */
+.liveAnalysisComponent {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  position: relative;
+  overflow: hidden;
+}
+
+.liveAnalysis__goniometer {
+  flex: 0 0 auto;
+  /* height is computed in JS from --live-split-ratio */
+  overflow: hidden;
+}
+
+.liveAnalysis__resizeHandle {
+  flex: 0 0 4px;
+  background: var(--vscode-sash-hoverBorder, rgba(255,255,255,0.1));
+  cursor: ns-resize;
+  z-index: 1;
+  transition: background 0.15s;
+}
+.liveAnalysis__resizeHandle:hover {
+  background: var(--vscode-focusBorder, rgba(0,120,212,0.7));
+}
+
+.liveAnalysis__spectrum {
+  flex: 1 1 0;
+  overflow: hidden;
+  min-height: 120px;
+}
+
+/* Expand button */
+.liveAnalysis__expandBtn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 20px;
+  height: 20px;
+  background: var(--vscode-button-secondaryBackground, rgba(255,255,255,0.1));
+  border: 1px solid var(--vscode-foreground, rgba(255,255,255,0.5));
+  color: var(--vscode-foreground, #ccc);
+  font-size: 11px;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  padding: 0;
+  line-height: 1;
+}
+.liveAnalysis__expandBtn:hover { opacity: 1; }
+
+/* Fullscreen overlay */
+.liveAnalysis__overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: var(--vscode-editor-background, #1e1e1e);
+  display: flex;
+  flex-direction: column;
+}
+.liveAnalysis__overlay.hidden { display: none; }
+
+/* ── Goniometer component ─────────────────────────────────────────────────── */
+.goniometerComponent {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: var(--gonioMeter-bg);
+}
+
+.gonioCanvasWrap {
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  position: relative;
+}
+
+.goniometer__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.goniometer__info {
+  flex: 0 0 auto;
+  padding: 2px 4px;
+  font-size: 11px;
+  font-family: var(--vscode-editor-font-family, monospace);
+  color: var(--vscode-foreground, #ccc);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--gonioMeter-bg);
+}
+
+.goniometer__corrBar {
+  flex: 1 1 0;
+  height: 8px;
+  border-radius: 2px;
+  background: var(--vscode-input-background, #333);
+  overflow: hidden;
+  position: relative;
+}
+
+.goniometer__corrFill {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  transition: none;
+}
+
+.goniometer__corrText {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  min-width: 60px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Spectrum analyzer component ──────────────────────────────────────────── */
+.spectralAnalyzerComponent {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--spectrum-bg);
+  position: relative;
+}
+
+.spectralAnalyzer__hoverReadout {
+  position: absolute;
+  left: 30px;
+  top: 8px;
+  z-index: 4;
+  pointer-events: none;
+  font-family: var(--vscode-editor-font-family, monospace);
+  font-size: 10px;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.95);
+  text-shadow:
+    0 0 4px rgba(0, 0, 0, 0.95),
+    0 1px 2px rgba(0, 0, 0, 0.9);
+  max-width: min(220px, calc(100% - 40px));
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.spectralAnalyzer__canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* ── Live monitoring toolbar (L/R/M/S solo) ─────────────────────────────── */
+.liveMonitoringBar {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  padding: 2px 0;
+  font-size: 11px;
+  color: var(--vscode-descriptionForeground, rgba(255,255,255,0.7));
+}
+
+.liveMonitoringBar__label {
+  margin-right: 4px;
+  font-weight: 600;
+}
+
+.liveMonitoringBar__btn {
+  width: auto !important;
+  min-width: 28px;
+  padding: 2px 6px !important;
+  font-size: 10px !important;
+  line-height: 1.2;
+  background: var(--vscode-button-secondaryBackground, rgba(255,255,255,0.08)) !important;
+  color: var(--vscode-button-secondaryForeground, #ccc) !important;
+  outline-offset: 1px;
+}
+
+.liveMonitoringBar__btn--active {
+  background: var(--vscode-button-background, #0e639c) !important;
+  color: var(--vscode-button-foreground, #fff) !important;
+}

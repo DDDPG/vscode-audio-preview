@@ -1,4 +1,5 @@
 import "./webview.css";
+import "../liveMeters/liveMeters.css";
 import { EventType } from "../../events";
 import {
   ExtMessage,
@@ -17,6 +18,9 @@ import InfoTableComponent from "../infoTable/infoTableComponent";
 import PlayerComponent from "../player/playerComponent";
 import SettingTab from "../settingTab/settingTabComponent";
 import AnalyzerComponent from "../analyzer/analyzerComponent";
+import LevelMeterComponent from "../liveMeters/levelMeterComponent";
+import LiveAnalysisComponent from "../liveMeters/liveAnalysisComponent";
+import LiveMonitoringBarComponent from "../liveMeters/liveMonitoringBarComponent";
 
 type CreateAudioContext = (sampleRate: number) => AudioContext;
 type CreateDecoder = (fileData: Uint8Array, ext: string) => Promise<IAudioDecoder>;
@@ -58,7 +62,12 @@ export default class WebView extends Component {
       <div id="infoTable"></div>
       <div id="player"></div>
       <div id="settingTab"></div>
-      <div id="analyzer"></div>
+      <div id="liveMonitoringBar"></div>
+      <div id="mainVisualizer">
+        <div id="analyzer"></div>
+        <div id="liveMetersMiddle"></div>
+        <div id="liveMetersRight"></div>
+      </div>
     `;
 
     this._postMessage({ type: WebviewMessageType.CONFIG });
@@ -143,7 +152,6 @@ export default class WebView extends Component {
 
     console.log("show other ui");
     infoTableComponent.showAdditionalInfo(decoder.duration);
-    infoTableComponent.appendCursorProbeRows();
     this._disposables.push(infoTableComponent);
 
     const audioContext = this._createAudioContext(decoder.sampleRate);
@@ -161,10 +169,18 @@ export default class WebView extends Component {
       this._config.playerDefault,
       audioBuffer,
     );
+
+    const analyzeService = new AnalyzeService(audioBuffer);
+    const analyzeSettingsService = AnalyzeSettingsService.fromDefaultSetting(
+      this._config.analyzeDefault,
+      audioBuffer,
+    );
+
     const playerService = new PlayerService(
       audioContext,
       audioBuffer,
       playerSettingsService,
+      analyzeSettingsService,
     );
     const playerComponent = new PlayerComponent(
       "#player",
@@ -172,12 +188,6 @@ export default class WebView extends Component {
       playerSettingsService,
     );
     this._disposables.push(playerService, playerComponent);
-
-    const analyzeService = new AnalyzeService(audioBuffer);
-    const analyzeSettingsService = AnalyzeSettingsService.fromDefaultSetting(
-      this._config.analyzeDefault,
-      audioBuffer,
-    );
 
     let persistTimer: ReturnType<typeof setTimeout> | undefined;
     const debouncedPersist = () => {
@@ -210,6 +220,69 @@ export default class WebView extends Component {
       analyzeSettingsService,
       settingTabComponent,
     );
+
+    // Wire live meter components and connect column visibility to settings.
+    const mainVisualizer = document.getElementById("mainVisualizer") as HTMLElement;
+    const liveMetersRight = document.getElementById("liveMetersRight") as HTMLElement;
+    const liveMetersMiddle = document.getElementById("liveMetersMiddle") as HTMLElement;
+
+    const levelMeterComponent = new LevelMeterComponent(
+      liveMetersRight,
+      playerService,
+      analyzeSettingsService,
+    );
+    const liveAnalysisComponent = new LiveAnalysisComponent(
+      liveMetersMiddle,
+      playerService,
+      analyzeSettingsService,
+    );
+    const liveMonitoringBarComponent = new LiveMonitoringBarComponent(
+      "#liveMonitoringBar",
+      analyzeSettingsService,
+    );
+    this._disposables.push(
+      levelMeterComponent,
+      liveAnalysisComponent,
+      liveMonitoringBarComponent,
+    );
+
+    const updateLiveColumns = () => {
+      const showMeter = analyzeSettingsService.showLevelMeter;
+      const showLive = analyzeSettingsService.showLiveAnalysis;
+      mainVisualizer.style.setProperty(
+        "--meter-col-width",
+        showMeter ? "112px" : "0px",
+      );
+      if (!showLive) {
+        mainVisualizer.style.setProperty("--live-col-width", "0px");
+        return;
+      }
+      const rect = mainVisualizer.getBoundingClientRect();
+      const rowH = rect.height > 1 ? rect.height : 400;
+      const rowW = rect.width > 1 ? rect.width : 800;
+      const meterPx = showMeter ? 112 : 0;
+      const minAnalyzerPx = 200;
+      const fromHeight = Math.round((rowH * 2) / 3);
+      const maxFromWidth = Math.max(
+        0,
+        Math.floor(rowW - meterPx - minAnalyzerPx),
+      );
+      const livePx = Math.max(0, Math.min(fromHeight, maxFromWidth));
+      mainVisualizer.style.setProperty("--live-col-width", `${livePx}px`);
+    };
+
+    // Recalculate live-col-width whenever the container resizes (guard for
+    // environments such as jsdom in unit tests where ResizeObserver is absent).
+    if (typeof ResizeObserver !== "undefined") {
+      const resizeObserver = new ResizeObserver(() => updateLiveColumns());
+      resizeObserver.observe(mainVisualizer);
+      this._register({ dispose: () => resizeObserver.disconnect() });
+    }
+
+    // Re-evaluate column widths on settings changes.
+    this._addEventlistener(analyzeSettingsService, EventType.AS_UPDATE_SHOW_LEVEL_METER, updateLiveColumns);
+    this._addEventlistener(analyzeSettingsService, EventType.AS_UPDATE_SHOW_LIVE_ANALYSIS, updateLiveColumns);
+    updateLiveColumns();
 
     decoder.dispose();
 
