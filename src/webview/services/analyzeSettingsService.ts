@@ -243,6 +243,11 @@ export default class AnalyzeSettingsService extends Service {
       AnalyzeSettingsService.WAVEFORM_CANVAS_VERTICAL_SCALE_MAX,
       1.0,
     );
+    this.dispatchEvent(
+      new CustomEvent(EventType.AS_UPDATE_WAVEFORM_VERTICAL_SCALE, {
+        detail: { value: this._waveformVerticalScale },
+      }),
+    );
   }
 
   private _spectrogramVisible: boolean;
@@ -804,6 +809,23 @@ export default class AnalyzeSettingsService extends Service {
     // init default amplitude
     setting.minAmplitude = defaultSetting.minAmplitude;
     setting.maxAmplitude = defaultSetting.maxAmplitude;
+
+    // Cached limits may come from another file while still inside [-100, 100]; ensure they include this buffer's true extrema (see config: defaults expand to fit data).
+    if (Number.isFinite(min) && Number.isFinite(max) && max > min - 1e-12) {
+      let changed = false;
+      if (setting.minAmplitude > min) {
+        setting.minAmplitude = min;
+        changed = true;
+      }
+      if (setting.maxAmplitude < max) {
+        setting.maxAmplitude = max;
+        changed = true;
+      }
+      if (changed) {
+        defaultSetting.minAmplitude = setting.minAmplitude;
+        defaultSetting.maxAmplitude = setting.maxAmplitude;
+      }
+    }
 
     // init spectrogram amplitude range
     setting.spectrogramAmplitudeRange =

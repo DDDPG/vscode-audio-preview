@@ -1,13 +1,42 @@
+/* Fill the webview viewport so grid `1fr` / flex `flex:1` rows get real height (graph deck). */
+html {
+  height: 100%;
+}
+
+body {
+  min-height: 100%;
+  height: 100%;
+}
+
+body > #root {
+  margin-block-start: 0;
+  margin-block-end: 0;
+}
+
 #root {
+  height: 100%;
+  max-height: 100%;
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: auto auto 1fr;
+  grid-template-columns: 1fr;
+  grid-template-rows: auto minmax(0, 1fr);
   gap: 0.5em;
   min-height: 0;
+  box-sizing: border-box;
+  overflow-y: auto;
+}
+
+.stickyHeaderChrome {
+  grid-column: 1;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: var(--vscode-editor-background, #1e1e1e);
+  display: flex;
+  flex-direction: column;
+  gap: 0;
 }
 
 .topChrome {
-  grid-column: 1 / -1;
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0.5em;
@@ -21,13 +50,12 @@
 }
 
 #liveMonitoringBar {
-  grid-column: 1 / -1;
   padding: 0 2px;
   min-height: 0;
 }
 
 #mainVisualizer {
-  grid-column: 1 / -1;
+  grid-column: 1;
   min-height: 0;
 }
 

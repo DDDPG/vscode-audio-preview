@@ -51,8 +51,12 @@ describe("webview", () => {
     expect(msg.type).toBe(WebviewMessageType.CONFIG);
   });
 
-  test("root layout includes top chrome and settings dock", () => {
+  test("root layout includes workspace strip, wave band, and settings dock", () => {
+    expect(document.getElementById("stickyHeaderChrome")).not.toBeNull();
     expect(document.getElementById("topChrome")).not.toBeNull();
+    expect(document.getElementById("workspaceStrip")).not.toBeNull();
+    expect(document.getElementById("graphDeck")).not.toBeNull();
+    expect(document.getElementById("waveBand")).not.toBeNull();
     expect(document.getElementById("settingsDock")).not.toBeNull();
     expect(document.getElementById("settingTab")).not.toBeNull();
     expect(document.getElementById("settingsFab")).not.toBeNull();
@@ -142,8 +146,9 @@ describe("webview", () => {
     expect(document.getElementById("player")?.innerHTML).not.toBe("");
   });
 
-  test("init analyzer after finish receiving data", async () => {
-    expect(document.getElementById("analyzer")?.innerHTML).not.toBe("");
+  test("init wave band after finish receiving data", async () => {
+    const waveBand = document.getElementById("waveBand");
+    expect(waveBand?.querySelectorAll(".waveBand__channel").length).toBeGreaterThan(0);
   });
 
   test("reload webview", async () => {
@@ -161,8 +166,10 @@ describe("webview", () => {
     expect(document.getElementById("player")?.innerHTML).toBe("");
   });
 
-  test("analyzer is empty after reload", async () => {
-    expect(document.getElementById("analyzer")?.innerHTML).toBe("");
+  test("wave band channels cleared after reload", async () => {
+    expect(
+      document.querySelector("#waveBand .waveBand__channels")?.innerHTML,
+    ).toBe("");
   });
 });
 

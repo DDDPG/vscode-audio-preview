@@ -21,3 +21,27 @@
   width: 100%;
   border: 1px solid var(--vscode-foreground);
 }
+
+.workspacePaneSection--stft,
+.workspacePaneSection--live,
+.workspacePaneSection--edit {
+  display: none;
+}
+
+html[data-workspace-pane="stft"] .workspacePaneSection--stft {
+  display: block;
+}
+
+html[data-workspace-pane="liveSpec"] .workspacePaneSection--live {
+  display: block;
+}
+
+html[data-workspace-pane="edit"] .workspacePaneSection--edit {
+  display: block;
+}
+
+.workspacePaneSection__editHint {
+  margin: 0.5em 0;
+  color: var(--vscode-descriptionForeground);
+  font-size: 0.9rem;
+}

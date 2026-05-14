@@ -25,6 +25,7 @@ export default class AnalyzeSettingsComponent extends Component {
 
     this._componentRoot.innerHTML = `
     <div class="analyzeSetting">
+      <div class="workspacePaneSection workspacePaneSection--stft">
       <h3>Common Settings</h3>
       <div>
           time range:
@@ -102,14 +103,10 @@ export default class AnalyzeSettingsComponent extends Component {
               <canvas class="analyzeSetting__canvas js-analyzeSetting-spectrogramColor" width="100px" height="5px"></canvas>
           </div>
       </div>
+      </div>
 
-      <h3>Live Meters</h3>
-      <div>
-          <label><input class="js-analyzeSetting-showLevelMeter" type="checkbox"> Show Level Meter</label>
-      </div>
-      <div>
-          <label><input class="js-analyzeSetting-showLiveAnalysis" type="checkbox"> Show Live Analysis (Goniometer + Spectrum)</label>
-      </div>
+      <div class="workspacePaneSection workspacePaneSection--live">
+      <h3>Live spectrum</h3>
       <div>
           Live FFT Size:
           <select class="analyzeSetting__select js-analyzeSetting-liveAnalysisFftSize">
@@ -133,6 +130,11 @@ export default class AnalyzeSettingsComponent extends Component {
               <option value="4.5">Roll 4.5</option>
               <option value="6">Roll 6</option>
           </select>
+      </div>
+      </div>
+
+      <div class="workspacePaneSection workspacePaneSection--edit">
+      <p class="workspacePaneSection__editHint">Edit &amp; export options will appear here.</p>
       </div>
     </div>
     `;
@@ -448,39 +450,6 @@ export default class AnalyzeSettingsComponent extends Component {
       },
     );
 
-    // init Show Level Meter checkbox
-    const showLevelMeterInput = <HTMLInputElement>(
-      this._componentRoot.querySelector(".js-analyzeSetting-showLevelMeter")
-    );
-    showLevelMeterInput.checked = settings.showLevelMeter;
-    this._addEventlistener(showLevelMeterInput, EventType.CHANGE, () => {
-      settings.showLevelMeter = showLevelMeterInput.checked;
-    });
-    this._addEventlistener(
-      settings,
-      EventType.AS_UPDATE_SHOW_LEVEL_METER,
-      (e: CustomEventInit) => {
-        showLevelMeterInput.checked = e.detail.value;
-      },
-    );
-
-    // init Show Live Analysis checkbox
-    const showLiveAnalysisInput = <HTMLInputElement>(
-      this._componentRoot.querySelector(".js-analyzeSetting-showLiveAnalysis")
-    );
-    showLiveAnalysisInput.checked = settings.showLiveAnalysis;
-    this._addEventlistener(showLiveAnalysisInput, EventType.CHANGE, () => {
-      settings.showLiveAnalysis = showLiveAnalysisInput.checked;
-    });
-    this._addEventlistener(
-      settings,
-      EventType.AS_UPDATE_SHOW_LIVE_ANALYSIS,
-      (e: CustomEventInit) => {
-        showLiveAnalysisInput.checked = e.detail.value;
-      },
-    );
-
-    // init Live FFT Size select
     const liveAnalysisFftSizeSelect = <HTMLSelectElement>(
       this._componentRoot.querySelector(".js-analyzeSetting-liveAnalysisFftSize")
     );

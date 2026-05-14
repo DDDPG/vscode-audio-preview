@@ -49,6 +49,10 @@ describe("analyzeSettingsComponent", () => {
     analyzerSettingsComponent.dispose();
   });
 
+  beforeEach(() => {
+    document.documentElement.dataset.workspacePane = "stft";
+  });
+
   test("waveform-visible should be updated when recieving update-waveform-visible event", () => {
     analyzeSettingsService.dispatchEvent(
       new CustomEvent(EventType.AS_UPDATE_WAVEFORM_VISIBLE, {
@@ -368,115 +372,93 @@ describe("analyzeSettingsComponent", () => {
     expect(Number(highInput.value)).toBeCloseTo(high);
   });
 
-  // ── Live Meters controls ────────────────────────────────────────────────
+  describe("live spectrum controls (liveSpec workspace pane)", () => {
+    beforeEach(() => {
+      document.documentElement.dataset.workspacePane = "liveSpec";
+    });
 
-  test("showLevelMeter checkbox should reflect service state", () => {
-    const cb = <HTMLInputElement>document.querySelector(".js-analyzeSetting-showLevelMeter");
-    expect(cb.checked).toBe(false);
-    cb.checked = true;
-    cb.dispatchEvent(new Event(EventType.CHANGE));
-    expect(analyzeSettingsService.showLevelMeter).toBe(true);
-    cb.checked = false;
-    cb.dispatchEvent(new Event(EventType.CHANGE));
-    expect(analyzeSettingsService.showLevelMeter).toBe(false);
-  });
+    test("liveAnalysisFftSize select should reflect service state", () => {
+      const sel = <HTMLSelectElement>(
+        document.querySelector(".js-analyzeSetting-liveAnalysisFftSize")
+      );
+      expect(sel.value).toBe("2048");
+      sel.value = "1024";
+      sel.dispatchEvent(new Event(EventType.CHANGE));
+      expect(analyzeSettingsService.liveAnalysisFftSize).toBe(1024);
+      sel.value = "4096";
+      sel.dispatchEvent(new Event(EventType.CHANGE));
+      expect(analyzeSettingsService.liveAnalysisFftSize).toBe(4096);
+    });
 
-  test("showLevelMeter checkbox updates when receiving AS_UPDATE_SHOW_LEVEL_METER event", () => {
-    const cb = <HTMLInputElement>document.querySelector(".js-analyzeSetting-showLevelMeter");
-    analyzeSettingsService.dispatchEvent(new CustomEvent(EventType.AS_UPDATE_SHOW_LEVEL_METER, { detail: { value: true } }));
-    expect(cb.checked).toBe(true);
-    analyzeSettingsService.dispatchEvent(new CustomEvent(EventType.AS_UPDATE_SHOW_LEVEL_METER, { detail: { value: false } }));
-    expect(cb.checked).toBe(false);
-  });
+    test("liveAnalysisFftSize select updates when receiving AS_UPDATE_LIVE_ANALYSIS_FFT_SIZE event", () => {
+      const sel = <HTMLSelectElement>(
+        document.querySelector(".js-analyzeSetting-liveAnalysisFftSize")
+      );
+      analyzeSettingsService.dispatchEvent(
+        new CustomEvent(EventType.AS_UPDATE_LIVE_ANALYSIS_FFT_SIZE, {
+          detail: { value: 512 },
+        }),
+      );
+      expect(sel.value).toBe("512");
+      analyzeSettingsService.dispatchEvent(
+        new CustomEvent(EventType.AS_UPDATE_LIVE_ANALYSIS_FFT_SIZE, {
+          detail: { value: 2048 },
+        }),
+      );
+      expect(sel.value).toBe("2048");
+    });
 
-  test("showLiveAnalysis checkbox should reflect service state", () => {
-    const cb = <HTMLInputElement>document.querySelector(".js-analyzeSetting-showLiveAnalysis");
-    expect(cb.checked).toBe(false);
-    cb.checked = true;
-    cb.dispatchEvent(new Event(EventType.CHANGE));
-    expect(analyzeSettingsService.showLiveAnalysis).toBe(true);
-    cb.checked = false;
-    cb.dispatchEvent(new Event(EventType.CHANGE));
-    expect(analyzeSettingsService.showLiveAnalysis).toBe(false);
-  });
+    test("live visual smoothing range updates service and label", () => {
+      const range = <HTMLInputElement>document.querySelector(
+        ".js-analyzeSetting-liveVisualSmoothingPct",
+      );
+      const label = document.querySelector(
+        ".js-analyzeSetting-liveVisualSmoothingPctLabel",
+      );
+      expect(range.value).toBe("35");
+      expect(label?.textContent).toBe("35");
+      range.value = "60";
+      range.dispatchEvent(new Event(EventType.INPUT));
+      expect(analyzeSettingsService.liveVisualSmoothingPct).toBe(60);
+      expect(label?.textContent).toBe("60");
+    });
 
-  test("showLiveAnalysis checkbox updates when receiving AS_UPDATE_SHOW_LIVE_ANALYSIS event", () => {
-    const cb = <HTMLInputElement>document.querySelector(".js-analyzeSetting-showLiveAnalysis");
-    analyzeSettingsService.dispatchEvent(new CustomEvent(EventType.AS_UPDATE_SHOW_LIVE_ANALYSIS, { detail: { value: true } }));
-    expect(cb.checked).toBe(true);
-    analyzeSettingsService.dispatchEvent(new CustomEvent(EventType.AS_UPDATE_SHOW_LIVE_ANALYSIS, { detail: { value: false } }));
-    expect(cb.checked).toBe(false);
-  });
+    test("live visual smoothing UI syncs from AS_UPDATE_LIVE_VISUAL_SMOOTHING", () => {
+      const range = <HTMLInputElement>document.querySelector(
+        ".js-analyzeSetting-liveVisualSmoothingPct",
+      );
+      const label = document.querySelector(
+        ".js-analyzeSetting-liveVisualSmoothingPctLabel",
+      );
+      analyzeSettingsService.dispatchEvent(
+        new CustomEvent(EventType.AS_UPDATE_LIVE_VISUAL_SMOOTHING, {
+          detail: { value: 10 },
+        }),
+      );
+      expect(range.value).toBe("10");
+      expect(label?.textContent).toBe("10");
+    });
 
-  test("liveAnalysisFftSize select should reflect service state", () => {
-    const sel = <HTMLSelectElement>document.querySelector(".js-analyzeSetting-liveAnalysisFftSize");
-    expect(sel.value).toBe("2048");
-    sel.value = "1024";
-    sel.dispatchEvent(new Event(EventType.CHANGE));
-    expect(analyzeSettingsService.liveAnalysisFftSize).toBe(1024);
-    sel.value = "4096";
-    sel.dispatchEvent(new Event(EventType.CHANGE));
-    expect(analyzeSettingsService.liveAnalysisFftSize).toBe(4096);
-  });
+    test("live spectrum tilt select updates service", () => {
+      const sel = <HTMLSelectElement>document.querySelector(
+        ".js-analyzeSetting-liveSpectrumTilt",
+      );
+      expect(sel.value).toBe("0");
+      sel.value = "3";
+      sel.dispatchEvent(new Event(EventType.CHANGE));
+      expect(analyzeSettingsService.liveSpectrumTiltDbPerOct).toBe(3);
+    });
 
-  test("liveAnalysisFftSize select updates when receiving AS_UPDATE_LIVE_ANALYSIS_FFT_SIZE event", () => {
-    const sel = <HTMLSelectElement>document.querySelector(".js-analyzeSetting-liveAnalysisFftSize");
-    analyzeSettingsService.dispatchEvent(new CustomEvent(EventType.AS_UPDATE_LIVE_ANALYSIS_FFT_SIZE, { detail: { value: 512 } }));
-    expect(sel.value).toBe("512");
-    analyzeSettingsService.dispatchEvent(new CustomEvent(EventType.AS_UPDATE_LIVE_ANALYSIS_FFT_SIZE, { detail: { value: 2048 } }));
-    expect(sel.value).toBe("2048");
-  });
-
-  test("live visual smoothing range updates service and label", () => {
-    const range = <HTMLInputElement>document.querySelector(
-      ".js-analyzeSetting-liveVisualSmoothingPct",
-    );
-    const label = document.querySelector(
-      ".js-analyzeSetting-liveVisualSmoothingPctLabel",
-    );
-    expect(range.value).toBe("35");
-    expect(label?.textContent).toBe("35");
-    range.value = "60";
-    range.dispatchEvent(new Event(EventType.INPUT));
-    expect(analyzeSettingsService.liveVisualSmoothingPct).toBe(60);
-    expect(label?.textContent).toBe("60");
-  });
-
-  test("live visual smoothing UI syncs from AS_UPDATE_LIVE_VISUAL_SMOOTHING", () => {
-    const range = <HTMLInputElement>document.querySelector(
-      ".js-analyzeSetting-liveVisualSmoothingPct",
-    );
-    const label = document.querySelector(
-      ".js-analyzeSetting-liveVisualSmoothingPctLabel",
-    );
-    analyzeSettingsService.dispatchEvent(
-      new CustomEvent(EventType.AS_UPDATE_LIVE_VISUAL_SMOOTHING, {
-        detail: { value: 10 },
-      }),
-    );
-    expect(range.value).toBe("10");
-    expect(label?.textContent).toBe("10");
-  });
-
-  test("live spectrum tilt select updates service", () => {
-    const sel = <HTMLSelectElement>document.querySelector(
-      ".js-analyzeSetting-liveSpectrumTilt",
-    );
-    expect(sel.value).toBe("0");
-    sel.value = "3";
-    sel.dispatchEvent(new Event(EventType.CHANGE));
-    expect(analyzeSettingsService.liveSpectrumTiltDbPerOct).toBe(3);
-  });
-
-  test("live spectrum tilt select syncs from AS_UPDATE_LIVE_SPECTRUM_TILT", () => {
-    const sel = <HTMLSelectElement>document.querySelector(
-      ".js-analyzeSetting-liveSpectrumTilt",
-    );
-    analyzeSettingsService.dispatchEvent(
-      new CustomEvent(EventType.AS_UPDATE_LIVE_SPECTRUM_TILT, {
-        detail: { value: 4.5 },
-      }),
-    );
-    expect(sel.value).toBe("4.5");
+    test("live spectrum tilt select syncs from AS_UPDATE_LIVE_SPECTRUM_TILT", () => {
+      const sel = <HTMLSelectElement>document.querySelector(
+        ".js-analyzeSetting-liveSpectrumTilt",
+      );
+      analyzeSettingsService.dispatchEvent(
+        new CustomEvent(EventType.AS_UPDATE_LIVE_SPECTRUM_TILT, {
+          detail: { value: 4.5 },
+        }),
+      );
+      expect(sel.value).toBe("4.5");
+    });
   });
 });

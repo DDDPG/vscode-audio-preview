@@ -13,6 +13,7 @@ export default class PlayerService extends Service {
   private _isPlaying: boolean = false;
   private _lastStartAcTime: number = 0;
   private _currentSec: number = 0;
+  /** Fixed playback start / cue time (white line). Not advanced by pause or tick. */
   private _playbackPosition: number = 0;
   private _source: AudioBufferSourceNode;
 
@@ -20,6 +21,10 @@ export default class PlayerService extends Service {
     return this._playbackPosition;
   }
 
+  /**
+   * Sets the fixed playback cue (absolute seconds). Play always starts from here;
+   * pausing does not move this value.
+   */
   public setPlaybackPosition(sec: number) {
     this._playbackPosition = Math.max(
       0,
@@ -38,6 +43,10 @@ export default class PlayerService extends Service {
 
   public get isPlaying() {
     return this._isPlaying;
+  }
+
+  public getAudioDuration(): number {
+    return this._audioBuffer.duration;
   }
   public get currentSec() {
     return this._currentSec;
@@ -309,7 +318,7 @@ export default class PlayerService extends Service {
     this._source.buffer = this._audioBuffer;
     this._source.connect(lastNode);
 
-    // play from the stored playback position
+    // Always start from the fixed cue (white line), not from where we last paused.
     this._isPlaying = true;
     this._currentSec = this._playbackPosition;
     this._lastStartAcTime = this._audioContext.currentTime;
@@ -329,16 +338,31 @@ export default class PlayerService extends Service {
   }
 
   public pause() {
-    // stop seek bar
     cancelAnimationFrame(this._animationFrameID);
 
-    // pause
     this._source.stop();
     this._currentSec += this._audioContext.currentTime - this._lastStartAcTime;
+    const stopped = Math.max(
+      0,
+      Math.min(this._currentSec, this._audioBuffer.duration),
+    );
+    this._currentSec = stopped;
+    this._seekbarValue =
+      this._audioBuffer.duration > 0
+        ? (100 * stopped) / this._audioBuffer.duration
+        : 0;
     this._isPlaying = false;
     this._source = undefined;
 
-    // update playing status
+    this.dispatchEvent(
+      new CustomEvent(EventType.UPDATE_SEEKBAR, {
+        detail: {
+          value: this._seekbarValue,
+          pos: stopped,
+        },
+      }),
+    );
+
     this.dispatchEvent(
       new CustomEvent(EventType.UPDATE_IS_PLAYING, {
         detail: {
@@ -372,18 +396,55 @@ export default class PlayerService extends Service {
       }),
     );
 
-    // pause if finish playing
     if (current > this._audioBuffer.duration) {
-      this.pause();
-      // reset current time
-      this._currentSec = 0;
-      this._seekbarValue = 0;
+      cancelAnimationFrame(this._animationFrameID);
+      this._source.stop();
+      const dur = this._audioBuffer.duration;
+      this._currentSec = dur;
+      this._seekbarValue = dur > 0 ? 100 : 0;
+      this._isPlaying = false;
+      this._source = undefined;
+
+      this.dispatchEvent(
+        new CustomEvent(EventType.UPDATE_SEEKBAR, {
+          detail: {
+            value: this._seekbarValue,
+            pos: dur,
+          },
+        }),
+      );
+      this.dispatchEvent(
+        new CustomEvent(EventType.UPDATE_IS_PLAYING, {
+          detail: {
+            value: this._isPlaying,
+          },
+        }),
+      );
       return;
     }
 
     if (this._isPlaying) {
       this._animationFrameID = requestAnimationFrame(() => this.tick());
     }
+  }
+
+  /**
+   * Live update UI while dragging the position slider (does not restart playback).
+   * seek value is 0~100.
+   */
+  public previewSeekFromPercent(value: number) {
+    const sec = (value * this._audioBuffer.duration) / 100;
+    this.setPlaybackPosition(sec);
+    this._currentSec = this._playbackPosition;
+    this._seekbarValue = value;
+    this.dispatchEvent(
+      new CustomEvent(EventType.UPDATE_SEEKBAR, {
+        detail: {
+          value: this._seekbarValue,
+          pos: this._currentSec,
+        },
+      }),
+    );
   }
 
   // seekbar value is 0~100
@@ -394,8 +455,9 @@ export default class PlayerService extends Service {
       this.pause();
     }
 
-    // update seek bar value
-    this._currentSec = (value * this._audioBuffer.duration) / 100;
+    const sec = (value * this._audioBuffer.duration) / 100;
+    this.setPlaybackPosition(sec);
+    this._currentSec = this._playbackPosition;
     this._seekbarValue = value;
     this.dispatchEvent(
       new CustomEvent(EventType.UPDATE_SEEKBAR, {

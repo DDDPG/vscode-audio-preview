@@ -61,7 +61,6 @@ describe("analyserComponent", () => {
       analyzeService,
       analyzeSettingsService,
       playerService,
-      false,
     );
   });
 
@@ -69,17 +68,12 @@ describe("analyserComponent", () => {
     analyzerComponent.dispose();
   });
 
-  test("analyzer should have analyze-button", () => {
-    expect(document.querySelector(".analyzeButton")).toBeTruthy();
-  });
-
-  test("figures in analyze-result-box should be created after analyze", () => {
-    analyzeService.analyze();
+  test("figures in analyze-result-box should be created on mount", () => {
     const figures = document
       .querySelector(".analyzeResultBox")
       ?.querySelectorAll("canvas");
-    // figures: waveform+axis and spectrogram+axis for each channels
-    expect(figures.length).toBe(audioBuffer.numberOfChannels * 4);
+    // figures: spectrogram + axis per channel
+    expect(figures.length).toBe(audioBuffer.numberOfChannels * 2);
   });
 
   test("seek-bar on the figures should be created after analyze", () => {
@@ -88,8 +82,8 @@ describe("analyserComponent", () => {
   });
 });
 
-describe("auto analyze", () => {
-  test("analyzer should start analyze if autoAnalyze is true", () => {
+describe("analyzer mount", () => {
+  test("analyzer runs spectrogram on mount", () => {
     const audioContext = createAudioContext(44100);
     const audioBuffer = audioContext.createBuffer(2, 44100, 44100);
     const ad = {
@@ -139,72 +133,13 @@ describe("auto analyze", () => {
       analyzeService,
       analyzeSettingsService,
       playerService,
-      true,
     );
     expect(
       document.querySelector(".analyzeResultBox")?.querySelectorAll("canvas")
         .length,
-    ).toBe(8);
+    ).toBe(4);
     ac.dispose();
-  });
-
-  test("analyzer should not start analyze if autoAnalyze is false", () => {
-    const audioContext = createAudioContext(44100);
-    const audioBuffer = audioContext.createBuffer(2, 44100, 44100);
-    const ad = {
-      waveformVisible: undefined,
-      waveformVerticalScale: undefined,
-      spectrogramVisible: undefined,
-      spectrogramVerticalScale: undefined,
-      windowSizeIndex: undefined,
-      minAmplitude: undefined,
-      maxAmplitude: undefined,
-      minFrequency: undefined,
-      maxFrequency: undefined,
-      spectrogramAmplitudeRange: undefined,
-      frequencyScale: undefined,
-      melFilterNum: undefined,
-    };
-    const analyzeService = new AnalyzeService(audioBuffer);
-    const analyzeSettingsService = AnalyzeSettingsService.fromDefaultSetting(
-      ad,
-      audioBuffer,
-    );
-    const pd = {
-      volumeUnitDb: true,
-      initialVolumeDb: 0.0,
-      initialVolume: 1.0,
-      enableSpacekeyPlay: true,
-      enableSeekToPlay: true,
-      enableHpf: false,
-      hpfFrequency: PlayerSettingsService.FILTER_FREQUENCY_HPF_DEFAULT,
-      enableLpf: false,
-      lpfFrequency: PlayerSettingsService.FILTER_FREQUENCY_LPF_DEFAULT,
-      matchFilterFrequencyToSpectrogram: false,
-    };
-    const playerSettingsService = PlayerSettingsService.fromDefaultSetting(
-      pd,
-      audioBuffer,
-    );
-    const playerService = new PlayerService(
-      audioContext,
-      audioBuffer,
-      playerSettingsService,
-      analyzeSettingsService,
-    );
-    const ac = new AnalyzerComponent(
-      "#analyzer",
-      audioBuffer,
-      analyzeService,
-      analyzeSettingsService,
-      playerService,
-      false,
-    );
-    expect(
-      document.querySelector(".analyzeResultBox")?.querySelectorAll("canvas")
-        .length,
-    ).toBe(0);
-    ac.dispose();
+    playerService.dispose();
   });
 });
 
@@ -267,7 +202,6 @@ describe("position of seek-bar should be updated when recieving update-seekbar e
       analyzeService,
       analyzeSettingsService,
       playerService,
-      false,
     );
     analyzeService.analyze();
   });

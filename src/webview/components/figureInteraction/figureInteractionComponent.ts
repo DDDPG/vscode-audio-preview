@@ -45,11 +45,17 @@ export default class FigureInteractionComponent extends Component {
       playerService,
       EventType.UPDATE_SEEKBAR,
       (e: CustomEventInit) => {
-        const percentInFullRange = e.detail.value;
-        const sec = (percentInFullRange * audioBuffer.duration) / 100;
-        const percentInFigureRange =
-          ((sec - settings.minTime) / (settings.maxTime - settings.minTime)) *
-          100;
+        const props = analyseSettingsService.toProps();
+        const trng = props.maxTime - props.minTime;
+        if (trng <= 0) {
+          visibleBar.style.width = "0%";
+          return;
+        }
+        const sec =
+          typeof e.detail?.pos === "number" && Number.isFinite(e.detail.pos)
+            ? e.detail.pos
+            : (e.detail.value * audioBuffer.duration) / 100;
+        const percentInFigureRange = ((sec - props.minTime) / trng) * 100;
         if (percentInFigureRange < 0) {
           visibleBar.style.width = `0%`;
           return;
@@ -62,7 +68,7 @@ export default class FigureInteractionComponent extends Component {
       },
     );
 
-    // register playback position marker (static white line)
+    // fixed playback cue (white line); play always starts from this absolute time
     const positionBar = document.createElement("div");
     positionBar.className = "positionBar";
     positionBar.style.position = "absolute";
@@ -79,10 +85,14 @@ export default class FigureInteractionComponent extends Component {
       playerService,
       EventType.UPDATE_PLAYBACK_POSITION,
       (e: CustomEventInit) => {
+        const props = analyseSettingsService.toProps();
+        const trng = props.maxTime - props.minTime;
+        if (trng <= 0) {
+          positionBar.style.display = "none";
+          return;
+        }
         const sec = e.detail.sec;
-        const percentInFigureRange =
-          ((sec - settings.minTime) / (settings.maxTime - settings.minTime)) *
-          100;
+        const percentInFigureRange = ((sec - props.minTime) / trng) * 100;
         if (percentInFigureRange < 0 || 100 < percentInFigureRange) {
           positionBar.style.display = "none";
           return;
@@ -379,12 +389,15 @@ export default class FigureInteractionComponent extends Component {
           Math.abs(this.mouseDownY - mouseUpY) < 3
         ) {
           // set playback position marker (does not start playing)
+          const clickProps = analyseSettingsService.toProps();
+          const clickTrng = clickProps.maxTime - clickProps.minTime;
+          if (clickTrng <= 0 || rect.width <= 0) {
+            return;
+          }
           const xPercentInFigureRange =
             ((mouseUpX - rect.left) / rect.width) * 100;
           const sec =
-            (xPercentInFigureRange / 100) *
-              (settings.maxTime - settings.minTime) +
-            settings.minTime;
+            (xPercentInFigureRange / 100) * clickTrng + clickProps.minTime;
           playerService.setPlaybackPosition(sec);
           return;
         }

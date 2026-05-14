@@ -9,6 +9,25 @@
   background: var(--vscode-editor-background);
 }
 
+.settingTab__footer {
+  flex-shrink: 0;
+  display: flex;
+  justify-content: flex-end;
+  padding: 0.5rem 0.65rem;
+  border-top: 1px solid var(--vscode-panel-border);
+  background: var(--vscode-sideBar-background);
+}
+
+.settingTab__saveSpectrogram {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+  border-radius: 3px;
+  border: 1px solid var(--vscode-button-border, var(--vscode-panel-border));
+  background: var(--vscode-button-secondaryBackground);
+  color: var(--vscode-button-secondaryForeground);
+}
+
 .settingTab__body {
   display: flex;
   flex-direction: row;

@@ -18,6 +18,8 @@ export class EventType {
   // analyzeSettings
   public static readonly AS_UPDATE_WAVEFORM_VISIBLE =
     "as-update-waveform-visible";
+  public static readonly AS_UPDATE_WAVEFORM_VERTICAL_SCALE =
+    "as-update-waveform-vertical-scale";
   public static readonly AS_UPDATE_SPECTROGRAM_VISIBLE =
     "as-update-spectrogram-visible";
   public static readonly AS_UPDATE_WINDOW_SIZE_INDEX =
@@ -55,6 +57,8 @@ export class EventType {
     "as-update-live-spectrum-tilt";
   public static readonly AS_UPDATE_LIVE_MONITORING_MODE =
     "as-update-live-monitoring-mode";
+  /** `detail: { pane: WorkspacePaneId }` — active workspace column for FAB / options. */
+  public static readonly WORKSPACE_ACTIVE_PANE = "workspace-active-pane";
   public static readonly UPDATE_PLAYBACK_POSITION = "update-playback-position";
   // other
   public static readonly CLICK = "click";

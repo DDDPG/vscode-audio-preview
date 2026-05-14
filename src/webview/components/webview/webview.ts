@@ -13,7 +13,9 @@ import { IAudioDecoder } from "../../decoders/audioDecoderInterface";
 import PlayerService from "../../services/playerService";
 import PlayerSettingsService from "../../services/playerSettingsService";
 import AnalyzeService from "../../services/analyzeService";
-import AnalyzeSettingsService from "../../services/analyzeSettingsService";
+import AnalyzeSettingsService, {
+  FftBackend,
+} from "../../services/analyzeSettingsService";
 import InfoTableComponent from "../infoTable/infoTableComponent";
 import PlayerComponent from "../player/playerComponent";
 import SettingTab from "../settingTab/settingTabComponent";
@@ -21,6 +23,8 @@ import AnalyzerComponent from "../analyzer/analyzerComponent";
 import LevelMeterComponent from "../liveMeters/levelMeterComponent";
 import LiveAnalysisComponent from "../liveMeters/liveAnalysisComponent";
 import LiveMonitoringBarComponent from "../liveMeters/liveMonitoringBarComponent";
+import WaveBandComponent from "../waveBand/waveBandComponent";
+import { setActiveWorkspacePane } from "../../workspacePane";
 
 type CreateAudioContext = (sampleRate: number) => AudioContext;
 type CreateDecoder = (fileData: Uint8Array, ext: string) => Promise<IAudioDecoder>;
@@ -77,14 +81,88 @@ export default class WebView extends Component {
 
     const root = document.getElementById("root");
     root.innerHTML = `
-      <div id="topChrome" class="topChrome">
-        <div id="infoTable"></div>
-        <div id="player"></div>
+      <div id="stickyHeaderChrome" class="stickyHeaderChrome">
+        <div id="topChrome" class="topChrome">
+          <div id="infoTable"></div>
+          <div id="player"></div>
+        </div>
+        <div id="liveMonitoringBar"></div>
+        <div class="workspaceChrome">
+          <div
+            id="workspaceStrip"
+            class="workspaceChrome__tabs"
+            role="tablist"
+            aria-label="Visualization mode"
+          >
+            <button
+              type="button"
+              class="workspacePane__tab js-paneSelect-stft"
+              role="tab"
+              aria-selected="false"
+              aria-controls="deckStft"
+              id="tabStft"
+            >STFT</button>
+            <button
+              type="button"
+              class="workspacePane__tab js-paneSelect-liveSpec"
+              role="tab"
+              aria-selected="false"
+              aria-controls="deckLive"
+              id="tabLiveSpec"
+            >Live Spec</button>
+            <button
+              type="button"
+              class="workspacePane__tab js-paneSelect-edit"
+              role="tab"
+              aria-selected="false"
+              aria-controls="deckEdit"
+              id="tabEdit"
+            >Edit &amp; Export</button>
+          </div>
+        </div>
       </div>
-      <div id="liveMonitoringBar"></div>
-      <div id="mainVisualizer">
-        <div id="analyzer"></div>
-        <div id="liveMetersMiddle"></div>
+      <div id="mainVisualizer" class="mainVisualizer">
+        <div class="mainVisualizer__vizColumn">
+          <div id="waveBand" class="waveBand">
+            <div class="waveBand__channels"></div>
+            <div class="waveBand__resizeHandle" title="Drag to resize waveform height" aria-hidden="true"></div>
+          </div>
+          <div id="graphDeck" class="graphDeck">
+            <div
+              id="deckStft"
+              class="graphDeck__pane graphDeck__pane--stft"
+              role="tabpanel"
+              aria-labelledby="tabStft"
+              hidden
+            >
+              <div class="graphDeck__body">
+                <div id="stftGraphMount" class="graphDeck__graph workspacePane__graph" hidden></div>
+              </div>
+            </div>
+            <div
+              id="deckLive"
+              class="graphDeck__pane graphDeck__pane--live"
+              role="tabpanel"
+              aria-labelledby="tabLiveSpec"
+              hidden
+            >
+              <div class="graphDeck__body">
+                <div id="liveSpecGraphMount" class="graphDeck__graph workspacePane__graph" hidden></div>
+              </div>
+            </div>
+            <div
+              id="deckEdit"
+              class="graphDeck__pane graphDeck__pane--edit"
+              role="tabpanel"
+              aria-labelledby="tabEdit"
+              hidden
+            >
+              <div class="graphDeck__body graphDeck__body--placeholder">
+                <p class="workspacePane__placeholder">Cut and spectrum export — coming soon.</p>
+              </div>
+            </div>
+          </div>
+        </div>
         <div id="liveMetersRight"></div>
       </div>
       <div id="settingsDock" class="settingsDock">
@@ -95,6 +173,7 @@ export default class WebView extends Component {
           aria-expanded="false"
           aria-controls="settingsSheet"
           aria-haspopup="dialog"
+          aria-label="More options"
           aria-busy="false"
           disabled
           title="Loading audio…"
@@ -131,9 +210,10 @@ export default class WebView extends Component {
             aria-hidden="true"
           >0%</span>
           <span class="settingsDock__fabIcon" aria-hidden="true">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" stroke="currentColor" stroke-width="1.5"/>
-              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c0 .66.39 1.26 1 1.51H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="6" cy="12" r="1.75"/>
+              <circle cx="12" cy="12" r="1.75"/>
+              <circle cx="18" cy="12" r="1.75"/>
             </svg>
           </span>
         </button>
@@ -170,6 +250,7 @@ export default class WebView extends Component {
       ".settingsDock__fabRingBar",
     ) as SVGCircleElement | null;
     this._primeLoadRingGeometry();
+    document.documentElement.dataset.workspacePane = "stft";
   }
 
   private _primeLoadRingGeometry() {
@@ -254,7 +335,8 @@ export default class WebView extends Component {
     this._settingsFab.setAttribute("aria-busy", "false");
     if (success) {
       this._settingsFab.disabled = false;
-      this._settingsFab.setAttribute("title", "Settings");
+      this._settingsFab.setAttribute("title", "Options");
+      this._settingsFab.setAttribute("aria-label", "More options");
     } else {
       this._settingsFab.disabled = true;
       this._settingsFab.setAttribute("title", "Could not load audio");
@@ -391,6 +473,9 @@ export default class WebView extends Component {
       audioBuffer,
     );
 
+    analyzeSettingsService.waveformVisible = true;
+    analyzeSettingsService.showLiveAnalysis = false;
+
     const playerService = new PlayerService(
       audioContext,
       audioBuffer,
@@ -403,6 +488,15 @@ export default class WebView extends Component {
       playerSettingsService,
     );
     this._disposables.push(playerService, playerComponent);
+
+    const waveBandComponent = new WaveBandComponent(
+      "#waveBand .waveBand__channels",
+      audioBuffer,
+      analyzeSettingsService,
+      playerService,
+      analyzeService,
+    );
+    this._disposables.push(waveBandComponent);
 
     let persistTimer: ReturnType<typeof setTimeout> | undefined;
     const debouncedPersist = () => {
@@ -436,18 +530,12 @@ export default class WebView extends Component {
       settingTabComponent,
     );
 
-    // Wire live meter components and connect column visibility to settings.
+    // Wire level meter, monitoring bar, workspace panes (lazy STFT / Live).
     const mainVisualizer = document.getElementById("mainVisualizer") as HTMLElement;
     const liveMetersRight = document.getElementById("liveMetersRight") as HTMLElement;
-    const liveMetersMiddle = document.getElementById("liveMetersMiddle") as HTMLElement;
 
     const levelMeterComponent = new LevelMeterComponent(
       liveMetersRight,
-      playerService,
-      analyzeSettingsService,
-    );
-    const liveAnalysisComponent = new LiveAnalysisComponent(
-      liveMetersMiddle,
       playerService,
       analyzeSettingsService,
     );
@@ -455,72 +543,144 @@ export default class WebView extends Component {
       "#liveMonitoringBar",
       analyzeSettingsService,
     );
-    this._disposables.push(
-      levelMeterComponent,
-      liveAnalysisComponent,
-      liveMonitoringBarComponent,
-    );
+    this._disposables.push(levelMeterComponent, liveMonitoringBarComponent);
 
-    const updateLiveColumns = () => {
-      const showMeter = analyzeSettingsService.showLevelMeter;
-      const showLive = analyzeSettingsService.showLiveAnalysis;
+    const updateMeterColumn = () => {
       mainVisualizer.style.setProperty(
         "--meter-col-width",
-        showMeter ? "112px" : "0px",
+        analyzeSettingsService.showLevelMeter ? "112px" : "0px",
       );
-      if (!showLive) {
-        mainVisualizer.style.setProperty("--live-col-width", "0px");
-        return;
-      }
-      const rect = mainVisualizer.getBoundingClientRect();
-      const rowH = rect.height > 1 ? rect.height : 400;
-      const rowW = rect.width > 1 ? rect.width : 800;
-      const meterPx = showMeter ? 112 : 0;
-      const minAnalyzerPx = 200;
-      const fromHeight = Math.round((rowH * 2) / 3);
-      const maxFromWidth = Math.max(
-        0,
-        Math.floor(rowW - meterPx - minAnalyzerPx),
-      );
-      const livePx = Math.max(0, Math.min(fromHeight, maxFromWidth));
-      mainVisualizer.style.setProperty("--live-col-width", `${livePx}px`);
     };
+    this._addEventlistener(
+      analyzeSettingsService,
+      EventType.AS_UPDATE_SHOW_LEVEL_METER,
+      updateMeterColumn,
+    );
+    updateMeterColumn();
 
-    // Recalculate live-col-width whenever the container resizes (guard for
-    // environments such as jsdom in unit tests where ResizeObserver is absent).
     if (typeof ResizeObserver !== "undefined") {
-      const resizeObserver = new ResizeObserver(() => updateLiveColumns());
+      const resizeObserver = new ResizeObserver(() => updateMeterColumn());
       resizeObserver.observe(mainVisualizer);
       this._register({ dispose: () => resizeObserver.disconnect() });
     }
 
-    // Re-evaluate column widths on settings changes.
-    this._addEventlistener(analyzeSettingsService, EventType.AS_UPDATE_SHOW_LEVEL_METER, updateLiveColumns);
-    this._addEventlistener(analyzeSettingsService, EventType.AS_UPDATE_SHOW_LIVE_ANALYSIS, updateLiveColumns);
-    updateLiveColumns();
-
-    decoder.dispose();
-
-    // Phase 2: defer spectrogram/analyzer init so the player and info table
-    // are visible before the potentially-long analysis begins.
-    const scheduleIdle: (cb: () => void) => void =
-      typeof requestIdleCallback !== "undefined"
-        ? (cb) => requestIdleCallback(cb)
-        : (cb) => setTimeout(cb, 0);
-
-    scheduleIdle(async () => {
-      // Try to initialize essentia.js WASM for higher-quality STFT
-      await analyzeService.initEssentia();
-
-      const analyzerComponent = new AnalyzerComponent(
-        "#analyzer",
+    let stftAnalyzer: AnalyzerComponent | undefined;
+    const stftGraphMount = document.getElementById(
+      "stftGraphMount",
+    ) as HTMLElement | null;
+    const ensureStftMounted = async () => {
+      if (stftAnalyzer || !stftGraphMount) {
+        return;
+      }
+      stftGraphMount.removeAttribute("hidden");
+      if (analyzeSettingsService.fftBackend === FftBackend.Essentia) {
+        await analyzeService.initEssentia();
+      }
+      analyzeSettingsService.spectrogramVisible = true;
+      stftAnalyzer = new AnalyzerComponent(
+        "#stftGraphMount",
         audioBuffer,
         analyzeService,
         analyzeSettingsService,
         playerService,
-        this._config.autoAnalyze,
       );
-      this._disposables.push(analyzerComponent);
-    });
+      this._disposables.push(stftAnalyzer);
+    };
+
+    let liveAnalysisComponent: LiveAnalysisComponent | undefined;
+    const liveSpecGraphMount = document.getElementById(
+      "liveSpecGraphMount",
+    ) as HTMLElement | null;
+    const ensureLiveMounted = () => {
+      if (liveAnalysisComponent || !liveSpecGraphMount) {
+        return;
+      }
+      analyzeSettingsService.showLiveAnalysis = true;
+      liveSpecGraphMount.removeAttribute("hidden");
+      liveAnalysisComponent = new LiveAnalysisComponent(
+        liveSpecGraphMount,
+        playerService,
+        analyzeSettingsService,
+      );
+      this._disposables.push(liveAnalysisComponent);
+      updateMeterColumn();
+    };
+
+    const wirePaneSelect = (
+      sel: string,
+      pane: "stft" | "liveSpec" | "edit",
+      onSelect?: () => void | Promise<void>,
+    ) => {
+      const btn = document.querySelector(sel) as HTMLButtonElement | null;
+      if (!btn) {
+        return;
+      }
+      this._addEventlistener(btn, EventType.CLICK, () => {
+        void (async () => {
+          setActiveWorkspacePane(pane);
+          await onSelect?.();
+        })();
+      });
+    };
+    wirePaneSelect(".js-paneSelect-stft", "stft", ensureStftMounted);
+    wirePaneSelect(".js-paneSelect-liveSpec", "liveSpec", ensureLiveMounted);
+    wirePaneSelect(".js-paneSelect-edit", "edit");
+
+    this._addEventlistener(document, EventType.WORKSPACE_ACTIVE_PANE, ((ev: Event) => {
+      const e = ev as CustomEvent<{ pane: string }>;
+      const p = e.detail?.pane;
+      for (const el of document.querySelectorAll<HTMLElement>(
+        ".workspacePane__tab--active",
+      )) {
+        el.classList.remove("workspacePane__tab--active");
+      }
+      const stftDeck = document.getElementById("deckStft");
+      const liveDeck = document.getElementById("deckLive");
+      const editDeck = document.getElementById("deckEdit");
+      if (p === "none" || !p) {
+        if (stftDeck && liveDeck && editDeck) {
+          stftDeck.setAttribute("hidden", "");
+          liveDeck.setAttribute("hidden", "");
+          editDeck.setAttribute("hidden", "");
+        }
+        document.getElementById("tabStft")?.setAttribute("aria-selected", "false");
+        document
+          .getElementById("tabLiveSpec")
+          ?.setAttribute("aria-selected", "false");
+        document.getElementById("tabEdit")?.setAttribute("aria-selected", "false");
+        return;
+      }
+      const map: Record<string, string> = {
+        stft: ".js-paneSelect-stft",
+        liveSpec: ".js-paneSelect-liveSpec",
+        edit: ".js-paneSelect-edit",
+      };
+      const hit = map[p];
+      if (hit) {
+        document.querySelector(hit)?.classList.add("workspacePane__tab--active");
+      }
+      if (p === "stft" || p === "liveSpec" || p === "edit") {
+        if (stftDeck && liveDeck && editDeck) {
+          stftDeck.toggleAttribute("hidden", p !== "stft");
+          liveDeck.toggleAttribute("hidden", p !== "liveSpec");
+          editDeck.toggleAttribute("hidden", p !== "edit");
+        }
+        const tabSel: Record<string, [string, string, string]> = {
+          stft: ["true", "false", "false"],
+          liveSpec: ["false", "true", "false"],
+          edit: ["false", "false", "true"],
+        };
+        const tri = tabSel[p];
+        document.getElementById("tabStft")?.setAttribute("aria-selected", tri[0]);
+        document
+          .getElementById("tabLiveSpec")
+          ?.setAttribute("aria-selected", tri[1]);
+        document.getElementById("tabEdit")?.setAttribute("aria-selected", tri[2]);
+      }
+    }) as EventListener);
+
+    setActiveWorkspacePane("none");
+
+    decoder.dispose();
   }
 }

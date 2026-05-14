@@ -16,22 +16,44 @@ export default class WaveFormComponent {
     ch: number,
     numOfCh: number,
   ) {
-    const componentRoot = document.querySelector(componentRootSelector);
+    const componentRoot = document.querySelector(
+      componentRootSelector,
+    ) as HTMLElement;
+    const dpr = Math.min(
+      typeof window !== "undefined" ? window.devicePixelRatio || 1 : 1,
+      2,
+    );
+
+    /** Match layout width so the bitmap is not narrower than the flex-stretched box (avoids empty right margin). */
+    const layoutW = Math.max(
+      1,
+      Math.floor(componentRoot.clientWidth || componentRoot.getBoundingClientRect().width) ||
+        width,
+    );
+
+    const canvasW = Math.max(1, Math.floor(layoutW * dpr));
+    const canvasH = Math.max(1, Math.floor(height * dpr));
 
     const canvas = document.createElement("canvas");
     canvas.className = "mainCanvas";
-    canvas.width = width;
-    canvas.height = height;
+    canvas.width = canvasW;
+    canvas.height = canvasH;
+    canvas.style.width = "100%";
+    canvas.style.height = `${height}px`;
     const context = canvas.getContext("2d", { alpha: false });
+    context.setTransform(dpr, 0, 0, dpr, 0, 0);
     context.fillStyle = "rgb(160,60,200)";
     context.strokeStyle = "rgb(160,60,200)";
     componentRoot.appendChild(canvas);
 
     const axisCanvas = document.createElement("canvas");
     axisCanvas.className = "axisCanvas";
-    axisCanvas.width = width;
-    axisCanvas.height = height;
+    axisCanvas.width = canvasW;
+    axisCanvas.height = canvasH;
+    axisCanvas.style.width = "100%";
+    axisCanvas.style.height = `${height}px`;
     const axisContext = axisCanvas.getContext("2d");
+    axisContext.setTransform(dpr, 0, 0, dpr, 0, 0);
     axisContext.font = `12px Arial`;
     componentRoot.appendChild(axisCanvas);
 
@@ -39,7 +61,7 @@ export default class WaveFormComponent {
     const [niceT, digitT] = AnalyzeService.roundToNearestNiceNumber(
       (settings.maxTime - settings.minTime) / 10,
     );
-    const dx = width / (settings.maxTime - settings.minTime);
+    const dx = layoutW / (settings.maxTime - settings.minTime);
     const t0 = Math.ceil(settings.minTime / niceT) * niceT;
     const numTAxis = Math.floor((settings.maxTime - settings.minTime) / niceT);
     for (let i = 0; i <= numTAxis; i++) {
@@ -47,7 +69,7 @@ export default class WaveFormComponent {
       const x = (t - settings.minTime) * dx;
 
       axisContext.fillStyle = "rgb(245,130,32)";
-      if (width * (5 / 100) < x && x < width * (95 / 100)) {
+      if (layoutW * (5 / 100) < x && x < layoutW * (95 / 100)) {
         axisContext.fillText(`${t.toFixed(digitT)}`, x, 10);
       } // don't draw near the edge
 
@@ -78,50 +100,55 @@ export default class WaveFormComponent {
 
       axisContext.fillStyle = "rgb(180,120,20)";
       if (12 < y && y < height) {
-        // don't draw on the horizontal axis
-        for (let j = 0; j < width; j++) {
+        for (let j = 0; j < layoutW; j++) {
           axisContext.fillRect(j, y, 1, 1);
         }
       }
     }
 
     const startIndex = Math.floor(settings.minTime * sampleRate);
-    const endIndex = Math.floor(settings.maxTime * sampleRate);
-    // limit data size
-    // thus, drawing waveform of long duration input can be done in about the same amount of time as short input
-    const step = Math.ceil((endIndex - startIndex) / 200000);
-    const data = channelData
-      .slice(startIndex, endIndex)
-      .filter((_, i) => i % step === 0);
-    // draw waveform
-    for (let i = 0; i < data.length; i++) {
-      // convert data. this is not a normalization.
-      // setting.maxAmplitude and setting.minAmplitude is not a min and max of data, but a figure's Y axis range.
-      // data is converted to satisfy setting.maxAmplitude=1 and setting.minAmplitude=0
-      // samples out of range is not displayed.
-      const d =
-        (data[i] - settings.minAmplitude) /
-        (settings.maxAmplitude - settings.minAmplitude);
+    const endIndex = Math.min(
+      Math.floor(settings.maxTime * sampleRate),
+      channelData.length,
+    );
+    const n = Math.max(0, endIndex - startIndex);
+    const ar = settings.maxAmplitude - settings.minAmplitude;
 
-      const x = (i / data.length) * width;
-      const y = height * (1 - d);
-
-      if (
-        data.length >
-        AnalyzeSettingsService.WAVEFORM_CANVAS_WIDTH *
-          WaveFormComponent.MIN_DATA_POINTS_PER_PIXEL
-      ) {
-        context.fillRect(x, y, 1, 1);
-      } else {
-        if (i === 0) {
-          context.beginPath();
-          context.moveTo(x, y);
-        } else if (i === data.length - 1) {
-          context.lineTo(x, y);
-          context.stroke();
-        } else {
-          context.lineTo(x, y);
+    if (n > 0 && ar > 0 && layoutW > 0) {
+      const ymin = new Float32Array(layoutW).fill(Number.POSITIVE_INFINITY);
+      const ymax = new Float32Array(layoutW).fill(Number.NEGATIVE_INFINITY);
+      const maxSamplesPerColumn = 16384;
+      for (let col = 0; col < layoutW; col++) {
+        const t0i = Math.floor((col / layoutW) * n);
+        const t1i = Math.min(n, Math.ceil(((col + 1) / layoutW) * n));
+        const span = Math.max(1, t1i - t0i);
+        const step = Math.max(1, Math.ceil(span / maxSamplesPerColumn));
+        for (let k = t0i; k < t1i; k += step) {
+          const v = channelData[startIndex + k];
+          if (v < ymin[col]) {
+            ymin[col] = v;
+          }
+          if (v > ymax[col]) {
+            ymax[col] = v;
+          }
         }
+      }
+
+      context.fillStyle = "rgb(160,60,200)";
+      for (let col = 0; col < layoutW; col++) {
+        const lo = ymin[col];
+        const hi = ymax[col];
+        if (!Number.isFinite(lo) || !Number.isFinite(hi)) {
+          continue;
+        }
+        const yLo = height * (1 - (hi - settings.minAmplitude) / ar);
+        const yHi = height * (1 - (lo - settings.minAmplitude) / ar);
+        let top = Math.min(yLo, yHi);
+        let bot = Math.max(yLo, yHi);
+        top = Math.max(0, Math.min(height, top));
+        bot = Math.max(0, Math.min(height, bot));
+        const h = Math.max(1, bot - top);
+        context.fillRect(col, top, 1, h);
       }
     }
 

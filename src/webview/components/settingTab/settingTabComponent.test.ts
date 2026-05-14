@@ -17,7 +17,7 @@ const SETTINGS_DOCK_HTML = `
       aria-expanded="false"
       aria-controls="settingsSheet"
       aria-haspopup="dialog"
-      title="Settings"
+      title="Options"
     ></button>
     <div class="settingsDock__backdrop js-settingsBackdrop" id="settingsBackdrop" hidden></div>
     <div
@@ -86,6 +86,17 @@ describe("settingTabComponent", () => {
     expect(fab.getAttribute("aria-expanded")).toBe("false");
   });
 
+  test("Save button triggers spectrogram re-analyze", () => {
+    const spy = jest.spyOn(analyzeService, "analyze");
+    const saveBtn = document.querySelector(
+      ".js-saveSpectrogram",
+    ) as HTMLButtonElement;
+    expect(saveBtn).toBeTruthy();
+    saveBtn.click();
+    expect(spy).toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
   test("Escape closes the settings sheet when open", () => {
     const fab = document.getElementById("settingsFab") as HTMLButtonElement;
     const sheet = document.getElementById("settingsSheet") as HTMLElement;
@@ -98,11 +109,15 @@ describe("settingTabComponent", () => {
     expect(sheet.hasAttribute("hidden")).toBe(true);
   });
 
-  test("contents of tab is hide by default", () => {
-    const contents = document.querySelector(".settingTab__content")!.children;
-    for (const content of contents) {
-      expect((content as HTMLElement).style.display).toBe("none");
-    }
+  test("Options tab content is visible by default", () => {
+    const optionsContent = document.querySelector(
+      ".js-settingTabContent-analyze",
+    ) as HTMLElement;
+    expect(optionsContent.style.display).toBe("block");
+    const playerContent = document.querySelector(
+      ".js-settingTabContent-player",
+    ) as HTMLElement;
+    expect(playerContent.style.display).toBe("none");
   });
 
   test("click player-button should show player content", () => {
@@ -116,55 +131,48 @@ describe("settingTabComponent", () => {
     expect(playerContent.style.display).toBe("block");
   });
 
-  test("click analyze-button should show analyze content", () => {
-    const analyzeButton = document.querySelector(
-      ".js-settingTabButton-analyze",
+  test("click options-button should show options content", () => {
+    const playerButton = document.querySelector(
+      ".js-settingTabButton-player",
     ) as HTMLButtonElement;
-    analyzeButton.click();
+    playerButton.click();
+    const optionsButton = document.querySelector(
+      ".js-settingTabButton-options",
+    ) as HTMLButtonElement;
+    optionsButton.click();
     const analyzeContent = document.querySelector(
       ".js-settingTabContent-analyze",
     ) as HTMLElement;
     expect(analyzeContent.style.display).toBe("block");
   });
 
-  test("click hide-button should hide all contents", () => {
-    const hideButton = document.querySelector(
-      ".js-settingTabButton-hide",
-    ) as HTMLButtonElement;
-    hideButton.click();
-    const contents = document.querySelector(".settingTab__content")!.children;
-    for (const content of contents) {
-      expect((content as HTMLElement).style.display).toBe("none");
-    }
-  });
-
   test("selected tab button should have active class", () => {
-    const analyzeButton = document.querySelector(
-      ".js-settingTabButton-analyze",
+    const playerButton = document.querySelector(
+      ".js-settingTabButton-player",
     ) as HTMLButtonElement;
-    analyzeButton.click();
-    expect(analyzeButton.classList.contains("settingTab__button--active")).toBe(
+    playerButton.click();
+    expect(playerButton.classList.contains("settingTab__button--active")).toBe(
       true,
     );
-    const hideButton = document.querySelector(
-      ".js-settingTabButton-hide",
+    const optionsButton = document.querySelector(
+      ".js-settingTabButton-options",
     ) as HTMLButtonElement;
-    hideButton.click();
-    expect(hideButton.classList.contains("settingTab__button--active")).toBe(
+    optionsButton.click();
+    expect(optionsButton.classList.contains("settingTab__button--active")).toBe(
       true,
     );
   });
 
   test("active class should be removed when other tab button is clicked", () => {
-    const analyzeButton = document.querySelector(
-      ".js-settingTabButton-analyze",
+    const playerButton = document.querySelector(
+      ".js-settingTabButton-player",
     ) as HTMLButtonElement;
-    analyzeButton.click();
-    const hideButton = document.querySelector(
-      ".js-settingTabButton-hide",
+    playerButton.click();
+    const optionsButton = document.querySelector(
+      ".js-settingTabButton-options",
     ) as HTMLButtonElement;
-    hideButton.click();
-    expect(analyzeButton.classList.contains("settingTab__button--active")).toBe(
+    optionsButton.click();
+    expect(playerButton.classList.contains("settingTab__button--active")).toBe(
       false,
     );
   });

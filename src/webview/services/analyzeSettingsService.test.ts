@@ -413,7 +413,8 @@ describe("analyzeSettingsService", () => {
     defaultSettings.maxAmplitude = maxAmplitude;
     defaultSettings.minAmplitude = minAmplitude;
     const data = audioBuffer.getChannelData(0);
-    data[0], (data[1] = maxAmplitude), minAmplitude;
+    data.fill(minAmplitude);
+    data[1] = maxAmplitude;
     const as = AnalyzeSettingsService.fromDefaultSetting(
       defaultSettings,
       audioBuffer,
@@ -426,7 +427,8 @@ describe("analyzeSettingsService", () => {
     defaultSettings.maxAmplitude = maxAmplitude;
     defaultSettings.minAmplitude = minAmplitude;
     const data = audioBuffer.getChannelData(0);
-    data[0], (data[1] = maxAmplitude), minAmplitude;
+    data.fill(minAmplitude);
+    data[1] = maxAmplitude;
     const as = AnalyzeSettingsService.fromDefaultSetting(
       defaultSettings,
       audioBuffer,
@@ -474,7 +476,8 @@ describe("analyzeSettingsService", () => {
     defaultSettings.maxAmplitude = maxAmplitude;
     defaultSettings.minAmplitude = minAmplitude;
     const data = audioBuffer.getChannelData(0);
-    data[0], (data[1] = maxAmplitude), minAmplitude;
+    data.fill(minAmplitude);
+    data[1] = maxAmplitude;
     const as = AnalyzeSettingsService.fromDefaultSetting(
       defaultSettings,
       audioBuffer,
@@ -487,7 +490,8 @@ describe("analyzeSettingsService", () => {
     defaultSettings.maxAmplitude = maxAmplitude;
     defaultSettings.minAmplitude = minAmplitude;
     const data = audioBuffer.getChannelData(0);
-    data[0], (data[1] = maxAmplitude), minAmplitude;
+    data.fill(minAmplitude);
+    data[1] = maxAmplitude;
     const as = AnalyzeSettingsService.fromDefaultSetting(
       defaultSettings,
       audioBuffer,
@@ -502,6 +506,19 @@ describe("analyzeSettingsService", () => {
       audioBuffer,
     );
     expect(as.maxAmplitude).toBeCloseTo(as.maxAmplitudeOfAudioBuffer);
+  });
+  test("cached amplitude range expands to include buffer true peak (narrow max)", () => {
+    defaultSettings.minAmplitude = -0.2;
+    defaultSettings.maxAmplitude = 0.15;
+    const data = audioBuffer.getChannelData(0);
+    data.fill(0);
+    data[500] = 0.92;
+    const as = AnalyzeSettingsService.fromDefaultSetting(
+      defaultSettings,
+      audioBuffer,
+    );
+    expect(as.maxAmplitude).toBeGreaterThanOrEqual(0.92);
+    expect(as.minAmplitude).toBeLessThanOrEqual(-0.2);
   });
   test("AS_UpdateMaxAmplitude event should be sent", async () => {
     const as = AnalyzeSettingsService.fromDefaultSetting(

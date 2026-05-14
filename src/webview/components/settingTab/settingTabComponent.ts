@@ -32,21 +32,37 @@ export default class SettingTab extends Component {
       <div class="settingTab">
         <div class="settingTab__body">
           <div class="settingTab__menu" role="tablist" aria-orientation="vertical" aria-label="Setting sections">
-            <button type="button" class="settingTab__button settingTab__button--active js-settingTabButton-hide">hide</button>
+            <button type="button" class="settingTab__button settingTab__button--active js-settingTabButton-options">Options</button>
             <button type="button" class="settingTab__button js-settingTabButton-player">player</button>
-            <button type="button" class="settingTab__button js-settingTabButton-analyze">analyze</button>
             <button type="button" class="settingTab__button js-settingTabButton-easyCut">easyCut</button>
           </div>
           <div class="settingTab__content">
-            <div class="js-settingTabContent-player"></div>
             <div class="js-settingTabContent-analyze"></div>
+            <div class="js-settingTabContent-player"></div>
             <div class="js-settingTabContent-easyCut"></div>
           </div>
+        </div>
+        <div class="settingTab__footer">
+          <button
+            type="button"
+            class="settingTab__saveSpectrogram js-saveSpectrogram"
+            title="Redraw spectrogram with current analysis settings"
+          >
+            Save
+          </button>
         </div>
       </div>
     `;
 
     this.hideAllContent();
+    const analyzeContent = this._componentRoot.querySelector(
+      ".js-settingTabContent-analyze",
+    ) as HTMLElement;
+    analyzeContent.style.display = "block";
+    const optionsBtn = this._componentRoot.querySelector(
+      ".js-settingTabButton-options",
+    ) as HTMLButtonElement;
+    optionsBtn.classList.add("settingTab__button--active");
 
     new PlayerSettingsComponent(
       `${coponentRootSelector} .js-settingTabContent-player`,
@@ -66,13 +82,23 @@ export default class SettingTab extends Component {
       postMessage,
     );
 
-    const hideTabButton = this._componentRoot.querySelector(
-      ".js-settingTabButton-hide",
+    const saveSpectrogramBtn = this._componentRoot.querySelector(
+      ".js-saveSpectrogram",
+    ) as HTMLButtonElement | null;
+    if (saveSpectrogramBtn) {
+      this._addEventlistener(saveSpectrogramBtn, EventType.CLICK, () => {
+        analyzeService.analyze();
+      });
+    }
+
+    const optionsTabButton = this._componentRoot.querySelector(
+      ".js-settingTabButton-options",
     ) as HTMLButtonElement;
-    this._addEventlistener(hideTabButton, EventType.CLICK, () => {
+    this._addEventlistener(optionsTabButton, EventType.CLICK, () => {
       this.hideAllContent();
       this.resetActivebutton();
-      hideTabButton.classList.add("settingTab__button--active");
+      analyzeContent.style.display = "block";
+      optionsTabButton.classList.add("settingTab__button--active");
     });
 
     const playerTabButton = this._componentRoot.querySelector(
@@ -86,19 +112,6 @@ export default class SettingTab extends Component {
       ) as HTMLElement;
       playerTabContent.style.display = "block";
       playerTabButton.classList.add("settingTab__button--active");
-    });
-
-    const analyzeTabButton = this._componentRoot.querySelector(
-      ".js-settingTabButton-analyze",
-    ) as HTMLButtonElement;
-    this._addEventlistener(analyzeTabButton, EventType.CLICK, () => {
-      this.hideAllContent();
-      this.resetActivebutton();
-      const analyzeTabContent = this._componentRoot.querySelector(
-        ".js-settingTabContent-analyze",
-      ) as HTMLElement;
-      analyzeTabContent.style.display = "block";
-      analyzeTabButton.classList.add("settingTab__button--active");
     });
 
     const easyCutTabButton = this._componentRoot.querySelector(
@@ -157,10 +170,8 @@ export default class SettingTab extends Component {
           sheet.classList.add("settingsDock__sheet--open");
         });
       });
-      const firstTab = this._componentRoot.querySelector(
-        ".js-settingTabButton-hide",
-      ) as HTMLButtonElement | null;
-      firstTab?.focus();
+      const firstFocus = sheet.querySelector<HTMLElement>(FOCUSABLE_SELECTOR);
+      firstFocus?.focus();
     };
 
     const toggleSheet = () => {
